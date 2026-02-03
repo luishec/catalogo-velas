@@ -15,7 +15,20 @@ export function Catalog() {
 
   useEffect(() => {
     loadData();
+    registerPageVisit();
   }, []);
+
+  const registerPageVisit = async () => {
+    try {
+      await supabase.from('page_visits').insert({
+        user_agent: navigator.userAgent,
+        page_path: window.location.pathname
+      });
+    } catch (error) {
+      // Silenciosamente ignorar errores - no afectar la experiencia del usuario
+      console.debug('Visit not registered');
+    }
+  };
 
   useEffect(() => {
     if (categories.length > 0 && selectedCategory === null) {
