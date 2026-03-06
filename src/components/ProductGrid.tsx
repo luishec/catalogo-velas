@@ -23,38 +23,21 @@ export function ProductGrid({ products, categoryName }: ProductGridProps) {
       acc[mainName] = {
         mainName,
         code: product.code,
-        is_bestseller: product.is_bestseller,
-        mainImage: product.image_url,
+        isBestseller: product.isBestseller,
+        mainImage: product.imageUrls?.[0] ?? null,
         variants: []
       };
     }
 
-    const subcategories = [
-      product.subcategory,
-      product.subcategory_2,
-      product.subcategory_3,
-      product.subcategory_4,
-      product.subcategory_5,
-      product.subcategory_6,
-      product.subcategory_7,
-    ];
-
-    const imageUrls = [
-      product.image_url,
-      product.image_url_2,
-      product.image_url_3,
-      product.image_url_4,
-      product.image_url_5,
-      product.image_url_6,
-      product.image_url_7,
-    ];
+    const subcategories = product.subcategories ?? [];
+    const imageUrls = product.imageUrls ?? [];
 
     subcategories.forEach((subcat, index) => {
       if (subcat) {
         acc[mainName].variants.push({
           product,
           variantName: subcat,
-          imageUrl: imageUrls[index]
+          imageUrl: imageUrls[index] ?? null
         });
       }
     });
@@ -63,7 +46,7 @@ export function ProductGrid({ products, categoryName }: ProductGridProps) {
       acc[mainName].variants.push({
         product,
         variantName: '',
-        imageUrl: product.image_url
+        imageUrl: imageUrls[0] ?? null
       });
     }
 
@@ -71,8 +54,8 @@ export function ProductGrid({ products, categoryName }: ProductGridProps) {
   }, {} as Record<string, ProductGroup>);
 
   const productGroups = Object.values(groupedProducts).sort((a, b) => {
-    if (a.is_bestseller && !b.is_bestseller) return -1;
-    if (!a.is_bestseller && b.is_bestseller) return 1;
+    if (a.isBestseller && !b.isBestseller) return -1;
+    if (!a.isBestseller && b.isBestseller) return 1;
     return a.mainName.localeCompare(b.mainName);
   });
 
@@ -96,11 +79,11 @@ export function ProductGrid({ products, categoryName }: ProductGridProps) {
           <ProductCard
             key={`${group.mainName}-${groupIdx}`}
             product={{
-              id: group.variants[0].product.id,
+              _id: group.variants[0].product._id,
               code: group.code,
               name: group.mainName,
-              is_bestseller: group.is_bestseller,
-              image_url: group.mainImage
+              isBestseller: group.isBestseller,
+              imageUrl: group.mainImage
             }}
             mainImage={group.mainImage}
             variants={group.variants}

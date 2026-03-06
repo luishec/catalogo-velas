@@ -1,16 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase, optimizeImageUrl } from '../lib/supabase';
 import { LogOut, Upload, Save, X, Image as ImageIcon, Plus, Trash2 } from 'lucide-react';
 import type { Product, Category } from '../types';
+import { Id } from '../../convex/_generated/dataModel';
 
 export function AdminPanel() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, token } = useAuth();
   const navigate = useNavigate();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const productsData = useQuery(api.products.list);
+  const categoriesData = useQuery(api.categories.list);
+
+  const addProduct = useMutation(api.products.add);
+  const removeProduct = useMutation(api.products.remove);
+  const toggleBestsellerMut = useMutation(api.products.toggleBestseller);
+  const updateSubcategoriesMut = useMutation(api.products.updateSubcategories);
+  const updateProductImageMut = useMutation(api.products.updateProductImage);
+  const generateUploadUrl = useMutation(api.files.generateUploadUrl);
+
+  const products = (productsData as Product[] | undefined) ?? [];
+  const categories = (categoriesData as Category[] | undefined) ?? [];
+  const loading = productsData === undefined || categoriesData === undefined;
+
   const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [editingSubcategories, setEditingSubcategories] = useState<string | null>(null);
@@ -21,66 +35,33 @@ export function AdminPanel() {
   const [deletingProduct, setDeletingProduct] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<{ code?: string; name?: string; category_id?: string }>({});
 
-  useEffect(() => {
-    if (!user) {
-      navigate('/admin/login');
-      return;
-    }
-    loadProducts();
-  }, [user, navigate]);
+  if (!user) {
+    navigate('/admin/login');
+    return null;
+  }
 
-  const loadProducts = async () => {
-    try {
-      const [productsResult, categoriesResult] = await Promise.all([
-        supabase.from('products').select('*').order('code'),
-        supabase.from('categories').select('*').order('priority')
-      ]);
-
-      if (productsResult.error) throw productsResult.error;
-      if (categoriesResult.error) throw categoriesResult.error;
-
-      setProducts(productsResult.data || []);
-      setCategories(categoriesResult.data || []);
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleImageUpload = async (productId: string, file: File, imageIndex: number) => {
-    if (!file.type.startsWith('image/')) {
+  const handleImageUpload = async (productId: Id<"products">, file: File, imageIndex: number) => {
+    if (!file.type.startsWith('image/') || !token) {
       showMessage('error', 'Por favor selecciona un archivo de imagen válido');
       return;
     }
 
     setUploading(`${productId}-${imageIndex}`);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${productId}-${imageIndex}-${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const uploadUrl = await generateUploadUrl({ token });
+      const result = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+      const { storageId } = await result.json();
 
-      const { error: uploadError } = await supabase.storage
-        .from('product-images')
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(filePath);
-
-      const imageField = imageIndex === 0 ? 'image_url' : `image_url_${imageIndex + 1}`;
-      const { error: updateError } = await supabase
-        .from('products')
-        .update({ [imageField]: publicUrl })
-        .eq('id', productId);
-
-      if (updateError) throw updateError;
-
-      setProducts(products.map(p =>
-        p.id === productId ? { ...p, [imageField]: publicUrl } : p
-      ));
+      await updateProductImageMut({
+        token,
+        productId,
+        imageIndex,
+        storageId,
+      });
 
       showMessage('success', `Imagen ${imageIndex + 1} subida exitosamente`);
     } catch (error) {
@@ -128,49 +109,33 @@ export function AdminPanel() {
   };
 
   const handleAddProduct = async () => {
-    if (!validateProduct()) {
-      return;
-    }
+    if (!validateProduct() || !token) return;
 
     const sanitizedCode = sanitizeInput(newProduct.code);
     const sanitizedName = sanitizeInput(newProduct.name);
 
     try {
-      const { data, error } = await (supabase
-        .from('products') as any)
-        .insert({
-          code: sanitizedCode,
-          name: sanitizedName,
-          category_id: newProduct.category_id,
-          is_bestseller: false
-        })
-        .select();
+      await addProduct({
+        token,
+        code: sanitizedCode,
+        name: sanitizedName,
+        categoryId: newProduct.category_id as Id<"categories">,
+      });
 
-      if (error) throw error;
-
-      if (data) {
-        setProducts([...products, data[0]]);
-        setShowAddProduct(false);
-        setNewProduct({ code: '', name: '', category_id: '' });
-        setFormErrors({});
-        showMessage('success', 'Producto agregado exitosamente');
-      }
+      setShowAddProduct(false);
+      setNewProduct({ code: '', name: '', category_id: '' });
+      setFormErrors({});
+      showMessage('success', 'Producto agregado exitosamente');
     } catch (error) {
       console.error('Error adding product:', error);
       showMessage('error', 'Error al agregar el producto');
     }
   };
 
-  const handleDeleteProduct = async (productId: string) => {
+  const handleDeleteProduct = async (productId: Id<"products">) => {
+    if (!token) return;
     try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', productId);
-
-      if (error) throw error;
-
-      setProducts(products.filter(p => p.id !== productId));
+      await removeProduct({ token, productId });
       setDeletingProduct(null);
       showMessage('success', 'Producto eliminado exitosamente');
     } catch (error) {
@@ -179,19 +144,10 @@ export function AdminPanel() {
     }
   };
 
-  const toggleBestseller = async (productId: string, currentStatus: boolean) => {
+  const toggleBestseller = async (productId: Id<"products">) => {
+    if (!token) return;
     try {
-      const { error } = await supabase
-        .from('products')
-        .update({ is_bestseller: !currentStatus })
-        .eq('id', productId);
-
-      if (error) throw error;
-
-      setProducts(products.map(p =>
-        p.id === productId ? { ...p, is_bestseller: !currentStatus } : p
-      ));
-
+      await toggleBestsellerMut({ token, productId });
       showMessage('success', 'Estado actualizado exitosamente');
     } catch (error) {
       console.error('Error updating bestseller:', error);
@@ -199,35 +155,14 @@ export function AdminPanel() {
     }
   };
 
-  const handleUpdateSubcategories = async (productId: string) => {
+  const handleUpdateSubcategories = async (productId: Id<"products">) => {
+    if (!token) return;
     try {
-      const { error } = await supabase
-        .from('products')
-        .update({
-          subcategory: subcategoryValues[0] || null,
-          subcategory_2: subcategoryValues[1] || null,
-          subcategory_3: subcategoryValues[2] || null,
-          subcategory_4: subcategoryValues[3] || null,
-          subcategory_5: subcategoryValues[4] || null,
-          subcategory_6: subcategoryValues[5] || null,
-          subcategory_7: subcategoryValues[6] || null,
-        })
-        .eq('id', productId);
-
-      if (error) throw error;
-
-      setProducts(products.map(p =>
-        p.id === productId ? {
-          ...p,
-          subcategory: subcategoryValues[0] || null,
-          subcategory_2: subcategoryValues[1] || null,
-          subcategory_3: subcategoryValues[2] || null,
-          subcategory_4: subcategoryValues[3] || null,
-          subcategory_5: subcategoryValues[4] || null,
-          subcategory_6: subcategoryValues[5] || null,
-          subcategory_7: subcategoryValues[6] || null,
-        } : p
-      ));
+      await updateSubcategoriesMut({
+        token,
+        productId,
+        subcategories: subcategoryValues,
+      });
 
       setEditingSubcategories(null);
       setSubcategoryValues(['', '', '', '', '', '', '']);
@@ -239,15 +174,16 @@ export function AdminPanel() {
   };
 
   const startEditingSubcategories = (product: Product) => {
-    setEditingSubcategories(product.id);
+    setEditingSubcategories(product._id);
+    const subs = product.subcategories ?? [];
     setSubcategoryValues([
-      product.subcategory || '',
-      product.subcategory_2 || '',
-      product.subcategory_3 || '',
-      product.subcategory_4 || '',
-      product.subcategory_5 || '',
-      product.subcategory_6 || '',
-      product.subcategory_7 || '',
+      subs[0] || '',
+      subs[1] || '',
+      subs[2] || '',
+      subs[3] || '',
+      subs[4] || '',
+      subs[5] || '',
+      subs[6] || '',
     ]);
   };
 
@@ -262,30 +198,12 @@ export function AdminPanel() {
   };
 
   const getSubcategoriesDisplay = (product: Product): string => {
-    const subcats = [
-      product.subcategory,
-      product.subcategory_2,
-      product.subcategory_3,
-      product.subcategory_4,
-      product.subcategory_5,
-      product.subcategory_6,
-      product.subcategory_7,
-    ].filter(Boolean);
-
+    const subcats = (product.subcategories ?? []).filter(Boolean);
     return subcats.length > 0 ? subcats.join(', ') : 'Ninguna';
   };
 
   const getImageUrl = (product: Product, index: number): string | null => {
-    const urls = [
-      product.image_url,
-      product.image_url_2,
-      product.image_url_3,
-      product.image_url_4,
-      product.image_url_5,
-      product.image_url_6,
-      product.image_url_7,
-    ];
-    return urls[index];
+    return product.imageUrls?.[index] ?? null;
   };
 
   if (loading) {
@@ -366,9 +284,9 @@ export function AdminPanel() {
             <h2 className="text-xl font-bold text-gray-800 mb-4">Gestión de Categorías</h2>
             <div className="space-y-3">
               {categories.map((category) => {
-                const categoryProducts = products.filter(p => p.category_id === category.id);
+                const categoryProducts = products.filter(p => p.categoryId === category._id);
                 return (
-                  <div key={category.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div key={category._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                     <div>
                       <h3 className="font-semibold text-gray-800">{category.name}</h3>
                       <p className="text-sm text-gray-600">Prioridad: {category.priority} • {categoryProducts.length} productos</p>
@@ -394,14 +312,14 @@ export function AdminPanel() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {products.map((product) => (
-                  <tr key={product.id} className="hover:bg-gray-50">
+                  <tr key={product._id} className="hover:bg-gray-50">
                     <td className="px-4 py-4 text-sm font-medium text-gray-900">{product.code}</td>
                     <td className="px-4 py-4 text-sm text-gray-700">{product.name}</td>
                     <td className="px-4 py-4 text-sm text-gray-600">
-                      {categories.find(c => c.id === product.category_id)?.name || 'Sin categoría'}
+                      {categories.find(c => c._id === product.categoryId)?.name || 'Sin categoría'}
                     </td>
                     <td className="px-4 py-4">
-                      {editingSubcategories === product.id ? (
+                      {editingSubcategories === product._id ? (
                         <div className="space-y-3">
                           {[0, 1, 2, 3, 4, 5, 6].map((index) => (
                             <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
@@ -421,7 +339,7 @@ export function AdminPanel() {
                               <div className="flex flex-col gap-2">
                                 {getImageUrl(product, index) ? (
                                   <img
-                                    src={optimizeImageUrl(getImageUrl(product, index), 60) || ''}
+                                    src={getImageUrl(product, index) || ''}
                                     alt={`Imagen ${index + 1}`}
                                     className="w-12 h-12 object-cover rounded border-2 border-cyan-200"
                                   />
@@ -432,7 +350,7 @@ export function AdminPanel() {
                                   </div>
                                 )}
                                 <label className="flex items-center gap-1 px-2 py-1 bg-cyan-400 text-white rounded text-xs hover:bg-cyan-500 transition-colors cursor-pointer">
-                                  {uploading === `${product.id}-${index}` ? (
+                                  {uploading === `${product._id}-${index}` ? (
                                     <>Subiendo...</>
                                   ) : (
                                     <>
@@ -445,10 +363,10 @@ export function AdminPanel() {
                                     accept="image/*"
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
-                                      if (file) handleImageUpload(product.id, file, index);
+                                      if (file) handleImageUpload(product._id, file, index);
                                     }}
                                     className="hidden"
-                                    disabled={uploading === `${product.id}-${index}`}
+                                    disabled={uploading === `${product._id}-${index}`}
                                   />
                                 </label>
                               </div>
@@ -456,7 +374,7 @@ export function AdminPanel() {
                           ))}
                           <div className="flex gap-2 mt-3">
                             <button
-                              onClick={() => handleUpdateSubcategories(product.id)}
+                              onClick={() => handleUpdateSubcategories(product._id)}
                               className="flex items-center gap-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"
                             >
                               <Save className="w-4 h-4" />
@@ -482,21 +400,21 @@ export function AdminPanel() {
                     </td>
                     <td className="px-4 py-4">
                       <button
-                        onClick={() => toggleBestseller(product.id, product.is_bestseller)}
+                        onClick={() => toggleBestseller(product._id)}
                         className={`px-3 py-1 rounded-lg font-medium transition-colors text-sm ${
-                          product.is_bestseller
+                          product.isBestseller
                             ? 'bg-pink-400 text-white hover:bg-pink-500'
                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
                       >
-                        {product.is_bestseller ? 'Sí' : 'No'}
+                        {product.isBestseller ? 'Sí' : 'No'}
                       </button>
                     </td>
                     <td className="px-4 py-4">
-                      {deletingProduct === product.id ? (
+                      {deletingProduct === product._id ? (
                         <div className="flex gap-2">
                           <button
-                            onClick={() => handleDeleteProduct(product.id)}
+                            onClick={() => handleDeleteProduct(product._id)}
                             className="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
                           >
                             Confirmar
@@ -510,7 +428,7 @@ export function AdminPanel() {
                         </div>
                       ) : (
                         <button
-                          onClick={() => setDeletingProduct(product.id)}
+                          onClick={() => setDeletingProduct(product._id)}
                           className="flex items-center gap-1 px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -605,7 +523,7 @@ export function AdminPanel() {
                   >
                     <option value="">Selecciona una categoría</option>
                     {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
+                      <option key={category._id} value={category._id}>
                         {category.name}
                       </option>
                     ))}

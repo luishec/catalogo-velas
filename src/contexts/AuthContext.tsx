@@ -1,47 +1,56 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { useQuery, useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+
+interface AuthUser {
+  email: string;
+}
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   loading: boolean;
+  token: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const TOKEN_KEY = 'admin_token';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+
+  const sessionData = useQuery(api.auth.validateSession, { token: token ?? undefined });
+  const loginMutation = useMutation(api.auth.login);
+  const logoutMutation = useMutation(api.auth.logout);
+
+  const loading = sessionData === undefined && token !== null;
+  const user = sessionData ?? null;
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    if (sessionData === null && token) {
+      localStorage.removeItem(TOKEN_KEY);
+      setToken(null);
+    }
+  }, [sessionData, token]);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      (async () => {
-        setUser(session?.user ?? null);
-      })();
-    });
+  const signIn = useCallback(async (email: string, password: string) => {
+    const result = await loginMutation({ email, password });
+    localStorage.setItem(TOKEN_KEY, result.token);
+    setToken(result.token);
+  }, [loginMutation]);
 
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-  };
-
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-  };
+  const signOut = useCallback(async () => {
+    if (token) {
+      await logoutMutation({ token });
+    }
+    localStorage.removeItem(TOKEN_KEY);
+    setToken(null);
+  }, [token, logoutMutation]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, token, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

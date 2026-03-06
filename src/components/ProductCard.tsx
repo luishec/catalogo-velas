@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
-import { optimizeImageUrl } from '../lib/supabase';
 
 interface ProductCardProduct {
-  id: string;
+  _id: string;
   code: string;
   name: string;
-  is_bestseller: boolean;
-  image_url: string | null;
+  isBestseller: boolean;
+  imageUrl: string | null;
 }
 
 interface ProductCardVariant {
@@ -26,11 +25,9 @@ export function ProductCard({ product, variants = [], mainImage }: ProductCardPr
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
-  const currentImageRaw = selectedVariantIndex === -1
-    ? (mainImage || product.image_url)
-    : (variants[selectedVariantIndex]?.imageUrl || product.image_url);
-
-  const currentImage = optimizeImageUrl(currentImageRaw, 70);
+  const currentImage = selectedVariantIndex === -1
+    ? (mainImage || product.imageUrl)
+    : (variants[selectedVariantIndex]?.imageUrl || product.imageUrl);
 
   const variantNames = variants
     .map(v => v.variantName)

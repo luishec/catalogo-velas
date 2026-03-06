@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { useQuery, useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { CatalogHeader } from '../components/CatalogHeader';
 import { SearchBar } from '../components/SearchBar';
 import { CategoryFilter } from '../components/CategoryFilter';
@@ -7,53 +8,29 @@ import { ProductGrid } from '../components/ProductGrid';
 import type { Product, Category } from '../types';
 
 export function Catalog() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const productsData = useQuery(api.products.list);
+  const categoriesData = useQuery(api.categories.list);
+  const recordVisit = useMutation(api.pageVisits.record);
+
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
+
+  const products = (productsData as Product[] | undefined) ?? [];
+  const categories = (categoriesData as Category[] | undefined) ?? [];
+  const loading = productsData === undefined || categoriesData === undefined;
 
   useEffect(() => {
-    loadData();
-    registerPageVisit();
-  }, []);
-
-  const registerPageVisit = async () => {
-    try {
-      await supabase.from('page_visits').insert({
-        user_agent: navigator.userAgent,
-        page_path: window.location.pathname
-      });
-    } catch (error) {
-      // Silenciosamente ignorar errores - no afectar la experiencia del usuario
-      console.debug('Visit not registered');
-    }
-  };
+    recordVisit({
+      userAgent: navigator.userAgent,
+      pagePath: window.location.pathname,
+    }).catch(() => {});
+  }, [recordVisit]);
 
   useEffect(() => {
     if (categories.length > 0 && selectedCategory === null) {
-      setSelectedCategory(categories[0].id);
+      setSelectedCategory(categories[0]._id);
     }
-  }, [categories]);
-
-  const loadData = async () => {
-    try {
-      const [productsResult, categoriesResult] = await Promise.all([
-        supabase.from('products').select('*').order('code'),
-        supabase.from('categories').select('*').order('priority')
-      ]);
-
-      if (productsResult.error) throw productsResult.error;
-      if (categoriesResult.error) throw categoriesResult.error;
-
-      setProducts(productsResult.data || []);
-      setCategories(categoriesResult.data || []);
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [categories, selectedCategory]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -67,27 +44,27 @@ export function Catalog() {
         return true;
       }
 
-      const category = categories.find(c => c.id === selectedCategory);
+      const category = categories.find(c => c._id === selectedCategory);
       if (category?.name === 'MÁS VENDIDO') {
-        return product.is_bestseller;
+        return product.isBestseller;
       }
 
-      return product.category_id === selectedCategory;
+      return product.categoryId === selectedCategory;
     });
   }, [products, searchTerm, selectedCategory, categories]);
 
   const selectedCategoryName = useMemo(() => {
     return selectedCategory
-      ? categories.find(c => c.id === selectedCategory)?.name || null
+      ? categories.find(c => c._id === selectedCategory)?.name || null
       : null;
   }, [selectedCategory, categories]);
 
   const productCounts = useMemo(() => {
     return categories.reduce((acc, category) => {
       if (category.name === 'MÁS VENDIDO') {
-        acc[category.id] = products.filter(p => p.is_bestseller).length;
+        acc[category._id] = products.filter(p => p.isBestseller).length;
       } else {
-        acc[category.id] = products.filter(p => p.category_id === category.id).length;
+        acc[category._id] = products.filter(p => p.categoryId === category._id).length;
       }
       return acc;
     }, {} as Record<string, number>);

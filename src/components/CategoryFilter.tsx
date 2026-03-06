@@ -1,5 +1,5 @@
 interface Category {
-  id: string;
+  _id: string;
   name: string;
   priority: number;
 }
@@ -45,12 +45,12 @@ export function CategoryFilter({
         <div className="flex lg:flex-col gap-2 sm:gap-3 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
           {categories.map((category) => (
             <button
-              key={category.id}
-              onClick={() => onSelectCategory(category.id)}
-              aria-label={`Filtrar por ${category.name}, ${productCounts[category.id] || 0} productos`}
-              aria-pressed={selectedCategory === category.id}
+              key={category._id}
+              onClick={() => onSelectCategory(category._id)}
+              aria-label={`Filtrar por ${category.name}, ${productCounts[category._id] || 0} productos`}
+              aria-pressed={selectedCategory === category._id}
               className={`px-3 sm:px-5 py-3 sm:py-4 rounded-xl font-semibold text-left transition-all duration-300 whitespace-nowrap lg:whitespace-normal flex-shrink-0 lg:flex-shrink ${
-                selectedCategory === category.id
+                selectedCategory === category._id
                   ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white shadow-lg'
                   : 'bg-gray-50 text-gray-700 active:bg-gray-200 lg:hover:bg-gray-100'
               }`}
@@ -62,13 +62,13 @@ export function CategoryFilter({
                 </span>
                 <span
                   className={`text-xs px-2 sm:px-3 py-0.5 sm:py-1 rounded-full font-bold ${
-                    selectedCategory === category.id
+                    selectedCategory === category._id
                       ? 'bg-white/30 text-white'
                       : 'bg-cyan-100 text-cyan-700'
                   }`}
                   aria-hidden="true"
                 >
-                  {productCounts[category.id] || 0}
+                  {productCounts[category._id] || 0}
                 </span>
               </div>
             </button>

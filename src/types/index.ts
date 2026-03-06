@@ -1,27 +1,20 @@
+import { Id } from "../../convex/_generated/dataModel";
+
 export interface Product {
-  id: string;
+  _id: Id<"products">;
+  _creationTime: number;
   code: string;
   name: string;
-  category_id: string;
-  is_bestseller: boolean;
-  image_url: string | null;
-  image_url_2: string | null;
-  image_url_3: string | null;
-  image_url_4: string | null;
-  image_url_5: string | null;
-  image_url_6: string | null;
-  image_url_7: string | null;
-  subcategory: string | null;
-  subcategory_2: string | null;
-  subcategory_3: string | null;
-  subcategory_4: string | null;
-  subcategory_5: string | null;
-  subcategory_6: string | null;
-  subcategory_7: string | null;
+  categoryId?: Id<"categories">;
+  isBestseller: boolean;
+  imageUrls?: string[];
+  imageStorageIds?: string[];
+  subcategories?: string[];
 }
 
 export interface Category {
-  id: string;
+  _id: Id<"categories">;
+  _creationTime: number;
   name: string;
   priority: number;
 }
@@ -35,7 +28,7 @@ export interface ProductVariant {
 export interface ProductGroup {
   mainName: string;
   code: string;
-  is_bestseller: boolean;
+  isBestseller: boolean;
   mainImage: string | null;
   variants: ProductVariant[];
 }

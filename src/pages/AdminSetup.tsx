@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 
@@ -9,6 +10,7 @@ export function AdminSetup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const signupMutation = useMutation(api.auth.signup);
 
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,13 +18,7 @@ export function AdminSetup() {
     setError('');
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
+      await signupMutation({ email, password });
       alert('¡Usuario administrador creado exitosamente! Ahora puedes iniciar sesión.');
       navigate('/admin/login');
     } catch (error: any) {
