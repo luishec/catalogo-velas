@@ -8,7 +8,7 @@ import { AdminSetup } from './pages/AdminSetup';
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/catalogo-velas">
         <Routes>
           <Route path="/" element={<Catalog />} />
           <Route path="/admin/setup" element={<AdminSetup />} />
