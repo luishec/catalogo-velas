@@ -8,7 +8,7 @@ import type { Product, Category } from '../types';
 import { Id } from '../../convex/_generated/dataModel';
 
 export function AdminPanel() {
-  const { user, signOut, token } = useAuth();
+  const { user, signOut, token, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const productsData = useQuery(api.products.list);
@@ -34,6 +34,14 @@ export function AdminPanel() {
   const [newProduct, setNewProduct] = useState({ code: '', name: '', category_id: '' });
   const [deletingProduct, setDeletingProduct] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<{ code?: string; name?: string; category_id?: string }>({});
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-600">Verificando sesión...</div>
+      </div>
+    );
+  }
 
   if (!user) {
     navigate('/admin/login');
