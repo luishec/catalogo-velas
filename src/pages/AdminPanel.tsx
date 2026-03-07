@@ -240,10 +240,10 @@ export function AdminPanel() {
         </div>
       </header>
 
-      <main className="max-w-[1400px] mx-auto px-6 py-8">
-        {message && (
+      {message && (
+        <div className="fixed top-4 right-4 z-50 animate-fade-in">
           <div
-            className={`mb-6 p-4 rounded-lg border-l-4 ${
+            className={`px-5 py-3 rounded-lg shadow-lg border-l-4 ${
               message.type === 'success'
                 ? 'bg-green-50 border-green-400 text-green-700'
                 : 'bg-red-50 border-red-400 text-red-700'
@@ -251,7 +251,10 @@ export function AdminPanel() {
           >
             {message.text}
           </div>
-        )}
+        </div>
+      )}
+
+      <main className="max-w-[1400px] mx-auto px-6 py-8">
 
         <div className="mb-6 flex justify-between items-center">
           <div className="flex gap-2">
