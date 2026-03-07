@@ -83,13 +83,21 @@ export function AdminLogin() {
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center space-y-3">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/admin/setup')}
             className="text-cyan-600 hover:text-cyan-700 text-sm font-medium"
           >
-            ← Volver al catálogo
+            ¿No tienes cuenta? Regístrate
           </button>
+          <div className="border-t border-gray-200 pt-3">
+            <button
+              onClick={() => navigate('/')}
+              className="text-gray-400 hover:text-gray-500 text-sm"
+            >
+              ← Volver al catálogo
+            </button>
+          </div>
         </div>
       </div>
     </div>
