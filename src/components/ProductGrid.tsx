@@ -62,15 +62,10 @@ export function ProductGrid({ products, categoryName }: ProductGridProps) {
   return (
     <div className="flex-1">
       {categoryName && (
-        <div className="mb-4 sm:mb-6 lg:mb-8 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-lg text-white">
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold flex items-center gap-2">
-            <span>🎉</span>
+        <div className="mb-3 sm:mb-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-xl px-4 py-2.5 sm:px-5 sm:py-3 shadow-md text-white text-center">
+          <h2 className="text-xl sm:text-2xl font-bold">
             {categoryName}
           </h2>
-          <p className="mt-1 sm:mt-2 text-cyan-50 flex items-center gap-2 text-sm sm:text-base">
-            <span>✨</span>
-            {products.length} productos disponibles
-          </p>
         </div>
       )}
 

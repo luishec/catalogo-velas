@@ -1,9 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { CatalogHeader } from '../components/CatalogHeader';
-import { SearchBar } from '../components/SearchBar';
-import { CategoryFilter } from '../components/CategoryFilter';
 import { ProductGrid } from '../components/ProductGrid';
 import type { Product, Category } from '../types';
 
@@ -11,59 +9,29 @@ export function Catalog() {
   const productsData = useQuery(api.products.list);
   const categoriesData = useQuery(api.categories.list);
 
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const products = (productsData as Product[] | undefined) ?? [];
+  const categories = (categoriesData as Category[] | undefined) ?? [];
+  const loading = productsData === undefined || categoriesData === undefined;
 
-  useEffect(() => {
-    if (categories.length > 0 && selectedCategory === null) {
-      setSelectedCategory(categories[0]._id);
-    }
-  }, [categories, selectedCategory]);
-
-  const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      const matchesSearch = searchTerm === '' ||
-        product.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.name.toLowerCase().includes(searchTerm.toLowerCase());
-
-      if (!matchesSearch) return false;
-
-      if (selectedCategory === null) {
-        return true;
-      }
-
-      const category = categories.find(c => c._id === selectedCategory);
-      if (category?.name === 'MÁS VENDIDO') {
-        return product.isBestseller;
-      }
-
-      return product.categoryId === selectedCategory;
-    });
-  }, [products, searchTerm, selectedCategory, categories]);
-
-  const selectedCategoryName = useMemo(() => {
-    return selectedCategory
-      ? categories.find(c => c._id === selectedCategory)?.name || null
-      : null;
-  }, [selectedCategory, categories]);
+  const productsByCategory = useMemo(() => {
+    return categories.map((category) => ({
+      category,
+      products: products.filter(p => p.categoryId === category._id),
+    })).filter(group => group.products.length > 0);
+  }, [categories, products]);
 
   const productCounts = useMemo(() => {
     return categories.reduce((acc, category) => {
-      if (category.name === 'MÁS VENDIDO') {
-        acc[category._id] = products.filter(p => p.isBestseller).length;
-      } else {
-        acc[category._id] = products.filter(p => p.categoryId === category._id).length;
-      }
+      acc[category._id] = products.filter(p => p.categoryId === category._id).length;
       return acc;
     }, {} as Record<string, number>);
   }, [categories, products]);
 
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchTerm(value);
-  }, []);
-
-  const handleCategorySelect = useCallback((categoryId: string | null) => {
-    setSelectedCategory(categoryId);
+  const handleScrollToCategory = useCallback((categoryId: string) => {
+    const el = document.getElementById(`category-${categoryId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }, []);
 
   if (loading) {
@@ -79,24 +47,30 @@ export function Catalog() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <CatalogHeader />
+      <CatalogHeader
+        categories={categories}
+        onSelectCategory={handleScrollToCategory}
+        productCounts={productCounts}
+      />
 
       <main className="max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-6">
-        <SearchBar searchTerm={searchTerm} onSearchChange={handleSearchChange} />
-
-        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-          <CategoryFilter
-            categories={categories}
-            selectedCategory={selectedCategory}
-            onSelectCategory={handleCategorySelect}
-            productCounts={productCounts}
-          />
-
-          <ProductGrid
-            products={filteredProducts}
-            categoryName={selectedCategoryName}
-          />
-        </div>
+        {productsByCategory.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+            <div className="text-6xl mb-4">📦</div>
+            <p className="text-gray-500 text-lg">No se encontraron productos</p>
+          </div>
+        ) : (
+          <div className="space-y-8 sm:space-y-12">
+            {productsByCategory.map(({ category, products: catProducts }) => (
+              <section key={category._id} id={`category-${category._id}`} className="scroll-mt-24">
+                <ProductGrid
+                  products={catProducts}
+                  categoryName={category.name}
+                />
+              </section>
+            ))}
+          </div>
+        )}
       </main>
 
       <footer className="bg-white border-t-4 border-cyan-400 mt-12 py-6">

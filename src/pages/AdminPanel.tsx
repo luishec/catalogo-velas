@@ -16,7 +16,6 @@ const categoryEmojis: Record<string, string> = {
   'FIGURAS': '🎭',
   'MINI VELAS': '🕯️',
   'VELITAS LARGAS': '🕯️',
-  'MÁS VENDIDO': '⭐',
   'VOLCÁN': '🌋',
 };
 
