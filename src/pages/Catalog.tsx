@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { CatalogHeader } from '../components/CatalogHeader';
 import { SearchBar } from '../components/SearchBar';
@@ -10,21 +10,9 @@ import type { Product, Category } from '../types';
 export function Catalog() {
   const productsData = useQuery(api.products.list);
   const categoriesData = useQuery(api.categories.list);
-  const recordVisit = useMutation(api.pageVisits.record);
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-
-  const products = (productsData as Product[] | undefined) ?? [];
-  const categories = (categoriesData as Category[] | undefined) ?? [];
-  const loading = productsData === undefined || categoriesData === undefined;
-
-  useEffect(() => {
-    recordVisit({
-      userAgent: navigator.userAgent,
-      pagePath: window.location.pathname,
-    }).catch(() => {});
-  }, [recordVisit]);
 
   useEffect(() => {
     if (categories.length > 0 && selectedCategory === null) {

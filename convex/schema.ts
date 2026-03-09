@@ -19,11 +19,6 @@ export default defineSchema({
     .index("by_code", ["code"])
     .index("by_category", ["categoryId"]),
 
-  pageVisits: defineTable({
-    userAgent: v.string(),
-    pagePath: v.string(),
-  }),
-
   admins: defineTable({
     email: v.string(),
     passwordHash: v.string(),

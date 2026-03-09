@@ -41,6 +41,14 @@ export const remove = mutation({
   args: { token: v.string(), productId: v.id("products") },
   handler: async (ctx, args) => {
     await assertAdmin(ctx, args.token);
+    const product = await ctx.db.get(args.productId);
+    if (product?.imageStorageIds) {
+      for (const storageId of product.imageStorageIds) {
+        if (storageId) {
+          await ctx.storage.delete(storageId as any);
+        }
+      }
+    }
     await ctx.db.delete(args.productId);
   },
 });
