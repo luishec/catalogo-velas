@@ -15,9 +15,12 @@ export default defineSchema({
     imageUrls: v.optional(v.array(v.string())),
     imageStorageIds: v.optional(v.array(v.string())),
     subcategories: v.optional(v.array(v.string())),
+    order: v.optional(v.number()),
+    isVisible: v.optional(v.boolean()),
   })
     .index("by_code", ["code"])
-    .index("by_category", ["categoryId"]),
+    .index("by_category", ["categoryId"])
+    .index("by_order", ["order"]),
 
   admins: defineTable({
     email: v.string(),

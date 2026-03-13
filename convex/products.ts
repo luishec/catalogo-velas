@@ -5,7 +5,7 @@ import { assertAdmin } from "./auth";
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("products").withIndex("by_code").collect();
+    return await ctx.db.query("products").withIndex("by_order").collect();
   },
 });
 
@@ -33,6 +33,8 @@ export const add = mutation({
       imageUrls: [],
       imageStorageIds: [],
       subcategories: [],
+      order: Date.now(),
+      isVisible: true,
     });
   },
 });
@@ -74,6 +76,30 @@ export const updateSubcategories = mutation({
     await ctx.db.patch(args.productId, {
       subcategories: args.subcategories,
     });
+  },
+});
+
+export const toggleVisibility = mutation({
+  args: { token: v.string(), productId: v.id("products") },
+  handler: async (ctx, args) => {
+    await assertAdmin(ctx, args.token);
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("Product not found");
+    const currentlyVisible = product.isVisible !== false;
+    await ctx.db.patch(args.productId, { isVisible: !currentlyVisible });
+  },
+});
+
+export const reorder = mutation({
+  args: {
+    token: v.string(),
+    updates: v.array(v.object({ productId: v.id("products"), order: v.number() })),
+  },
+  handler: async (ctx, args) => {
+    await assertAdmin(ctx, args.token);
+    for (const { productId, order } of args.updates) {
+      await ctx.db.patch(productId, { order });
+    }
   },
 });
 

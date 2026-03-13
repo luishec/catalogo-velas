@@ -10,6 +10,8 @@ export interface Product {
   imageUrls?: string[];
   imageStorageIds?: string[];
   subcategories?: string[];
+  order?: number;
+  isVisible?: boolean;
 }
 
 export interface Category {

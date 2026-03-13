@@ -1,5 +1,5 @@
 import { ProductCard } from './ProductCard';
-import type { Product, ProductVariant, ProductGroup } from '../types';
+import type { Product, ProductGroup } from '../types';
 
 interface ProductGridProps {
   products: Product[];
@@ -54,6 +54,11 @@ export function ProductGrid({ products, categoryName }: ProductGridProps) {
   }, {} as Record<string, ProductGroup>);
 
   const productGroups = Object.values(groupedProducts).sort((a, b) => {
+    const orderA = a.variants[0]?.product.order;
+    const orderB = b.variants[0]?.product.order;
+    if (orderA != null && orderB != null) return orderA - orderB;
+    if (orderA != null) return -1;
+    if (orderB != null) return 1;
     if (a.isBestseller && !b.isBestseller) return -1;
     if (!a.isBestseller && b.isBestseller) return 1;
     return a.mainName.localeCompare(b.mainName);

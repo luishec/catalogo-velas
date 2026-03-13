@@ -13,19 +13,23 @@ export function Catalog() {
   const categories = (categoriesData as Category[] | undefined) ?? [];
   const loading = productsData === undefined || categoriesData === undefined;
 
+  const visibleProducts = useMemo(() => {
+    return products.filter(p => p.isVisible !== false);
+  }, [products]);
+
   const productsByCategory = useMemo(() => {
     return categories.map((category) => ({
       category,
-      products: products.filter(p => p.categoryId === category._id),
+      products: visibleProducts.filter(p => p.categoryId === category._id),
     })).filter(group => group.products.length > 0);
-  }, [categories, products]);
+  }, [categories, visibleProducts]);
 
   const productCounts = useMemo(() => {
     return categories.reduce((acc, category) => {
-      acc[category._id] = products.filter(p => p.categoryId === category._id).length;
+      acc[category._id] = visibleProducts.filter(p => p.categoryId === category._id).length;
       return acc;
     }, {} as Record<string, number>);
-  }, [categories, products]);
+  }, [categories, visibleProducts]);
 
   const handleScrollToCategory = useCallback((categoryId: string) => {
     const el = document.getElementById(`category-${categoryId}`);

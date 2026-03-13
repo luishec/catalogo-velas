@@ -1,14 +1,32 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LogOut, Upload, Save, X, Image as ImageIcon, Plus,
-  Trash2, Search, Star, Pencil
+  Trash2, Search, Star, Pencil, Eye, EyeOff, GripVertical
 } from 'lucide-react';
 import type { Product, Category } from '../types';
 import { Id } from '../../convex/_generated/dataModel';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const categoryEmojis: Record<string, string> = {
   'NÚMEROS': '🔢',
@@ -18,6 +36,166 @@ const categoryEmojis: Record<string, string> = {
   'VELITAS LARGAS': '🕯️',
   'VOLCÁN': '🌋',
 };
+
+interface SortableProductCardProps {
+  product: Product;
+  disabled: boolean;
+  getImageCount: (p: Product) => number;
+  getImageUrl: (p: Product, i: number) => string | null;
+  getCategoryName: (id?: Id<'categories'>) => string;
+  onToggleBestseller: (id: Id<'products'>, e: React.MouseEvent) => void;
+  onToggleVisibility: (id: Id<'products'>, e: React.MouseEvent) => void;
+  onEdit: (p: Product) => void;
+  onDelete: (p: Product) => void;
+}
+
+function SortableProductCard({
+  product, disabled, getImageCount, getImageUrl, getCategoryName,
+  onToggleBestseller, onToggleVisibility, onEdit, onDelete,
+}: SortableProductCardProps) {
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id: product._id, disabled });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : undefined,
+  };
+
+  const imgCount = getImageCount(product);
+  const mainImg = getImageUrl(product, 0);
+  const hasNoImages = imgCount === 0;
+  const subcats = (product.subcategories ?? []).filter(Boolean);
+  const isHidden = product.isVisible === false;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden ${
+        hasNoImages ? 'border-2 border-dashed border-orange-300' : ''
+      } ${isHidden ? 'opacity-50 border-2 border-dashed border-red-400' : ''}`}
+    >
+      {/* Image area */}
+      <div className="aspect-[4/3] relative overflow-hidden bg-gray-50">
+        {mainImg ? (
+          <img
+            src={mainImg}
+            alt={product.name}
+            loading="lazy"
+            className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
+            <ImageIcon className="w-12 h-12 text-orange-300 mb-2" />
+            <span className="text-orange-400 text-xs font-medium">Sin imagen</span>
+          </div>
+        )}
+
+        {/* Drag handle - top left */}
+        {!disabled && (
+          <button
+            {...attributes}
+            {...listeners}
+            className="absolute top-2 left-2 p-1.5 rounded-full bg-white/80 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all cursor-grab active:cursor-grabbing"
+            title="Arrastrar para reordenar"
+          >
+            <GripVertical className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Bestseller star */}
+        <button
+          onClick={(e) => onToggleBestseller(product._id, e)}
+          className={`absolute top-2 ${disabled ? 'left-2' : 'left-10'} p-1.5 rounded-full transition-all ${
+            product.isBestseller
+              ? 'bg-yellow-400 text-white shadow-md'
+              : 'bg-white/80 text-gray-400 hover:bg-yellow-100 hover:text-yellow-500'
+          }`}
+          title={product.isBestseller ? 'Quitar más vendido' : 'Marcar más vendido'}
+        >
+          <Star className="w-4 h-4" fill={product.isBestseller ? 'currentColor' : 'none'} />
+        </button>
+
+        {/* Visibility toggle */}
+        <button
+          onClick={(e) => onToggleVisibility(product._id, e)}
+          className={`absolute top-2 ${disabled ? 'left-10' : 'left-[4.5rem]'} p-1.5 rounded-full transition-all ${
+            isHidden
+              ? 'bg-red-400 text-white shadow-md'
+              : 'bg-white/80 text-green-500 hover:bg-green-100'
+          }`}
+          title={isHidden ? 'Mostrar en catálogo' : 'Ocultar del catálogo'}
+        >
+          {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+
+        {/* Image count - top right */}
+        <div
+          className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-xs font-bold ${
+            imgCount === 7
+              ? 'bg-green-100 text-green-700'
+              : imgCount > 0
+              ? 'bg-orange-100 text-orange-700'
+              : 'bg-gray-200 text-gray-500'
+          }`}
+        >
+          {imgCount}/7
+        </div>
+
+        {/* Code badge - bottom right */}
+        <div className="absolute bottom-2 right-2">
+          <span className="inline-block bg-gradient-to-r from-cyan-400 to-blue-500 text-white px-2 py-0.5 rounded-lg text-xs font-bold shadow-md">
+            {product.code}
+          </span>
+        </div>
+      </div>
+
+      {/* Card body */}
+      <div className="p-3">
+        <h3 className="font-bold text-gray-800 text-sm leading-tight line-clamp-2 mb-1">
+          {product.name}
+        </h3>
+        <p className="text-xs text-gray-500 mb-2">
+          {categoryEmojis[getCategoryName(product.categoryId)] || '🎂'}{' '}
+          {getCategoryName(product.categoryId)}
+        </p>
+
+        {/* Subcategory pills */}
+        {subcats.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {subcats.map((sub, i) => (
+              <span
+                key={i}
+                className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px] font-medium"
+              >
+                {sub}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => onEdit(product)}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 transition-colors text-xs font-semibold"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            Editar
+          </button>
+          <button
+            onClick={() => onDelete(product)}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-xs font-semibold"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function AdminPanel() {
   const { user, signOut, token, loading: authLoading } = useAuth();
@@ -29,6 +207,8 @@ export function AdminPanel() {
   const addProduct = useMutation(api.products.add);
   const removeProduct = useMutation(api.products.remove);
   const toggleBestsellerMut = useMutation(api.products.toggleBestseller);
+  const toggleVisibilityMut = useMutation(api.products.toggleVisibility);
+  const reorderMut = useMutation(api.products.reorder);
   const updateSubcategoriesMut = useMutation(api.products.updateSubcategories);
   const updateProductImageMut = useMutation(api.products.updateProductImage);
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
@@ -45,6 +225,7 @@ export function AdminPanel() {
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   // Add product form
   const [newProduct, setNewProduct] = useState({ code: '', name: '', category_id: '' });
@@ -52,6 +233,12 @@ export function AdminPanel() {
 
   // Subcategory editing
   const [subcategoryValues, setSubcategoryValues] = useState<string[]>(['', '', '', '', '', '', '']);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  );
 
   // Auth guard
   if (authLoading) {
@@ -68,6 +255,8 @@ export function AdminPanel() {
   }
 
   // === Filtering & Stats ===
+  const hasActiveFilter = searchTerm !== '' || selectedCategory !== null;
+
   const filteredProducts = products.filter((p) => {
     const matchesSearch =
       searchTerm === '' ||
@@ -77,10 +266,12 @@ export function AdminPanel() {
     return matchesSearch && matchesCategory;
   });
 
+  const hiddenCount = products.filter((p) => p.isVisible === false).length;
   const stats = {
     total: products.length,
     missingImages: products.filter((p) => !p.imageUrls?.some(Boolean)).length,
     bestsellers: products.filter((p) => p.isBestseller).length,
+    hidden: hiddenCount,
   };
 
   const productCountsByCategory: Record<string, number> = {};
@@ -133,6 +324,18 @@ export function AdminPanel() {
     } catch (error) {
       console.error('Error updating bestseller:', error);
       showMessage('error', 'Error al actualizar');
+    }
+  };
+
+  const handleToggleVisibility = async (productId: Id<'products'>, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!token) return;
+    try {
+      await toggleVisibilityMut({ token, productId });
+      showMessage('success', 'Visibilidad actualizada');
+    } catch (error) {
+      console.error('Error toggling visibility:', error);
+      showMessage('error', 'Error al cambiar visibilidad');
     }
   };
 
@@ -230,6 +433,40 @@ export function AdminPanel() {
     if (!categoryId) return 'Sin categoría';
     return categories.find((c) => c._id === categoryId)?.name || 'Sin categoría';
   };
+
+  // === Drag & Drop ===
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id || !token) return;
+
+    const oldIndex = filteredProducts.findIndex((p) => p._id === active.id);
+    const newIndex = filteredProducts.findIndex((p) => p._id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(filteredProducts, oldIndex, newIndex);
+    const updates = reordered.map((p, i) => ({
+      productId: p._id,
+      order: (i + 1) * 1000,
+    }));
+
+    try {
+      await reorderMut({ token, updates });
+    } catch (error) {
+      console.error('Error reordering:', error);
+      showMessage('error', 'Error al reordenar productos');
+    }
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+  };
+
+  const activeProduct = activeId ? filteredProducts.find((p) => p._id === activeId) : null;
 
   // === Loading state ===
   if (dataLoading) {
@@ -347,7 +584,19 @@ export function AdminPanel() {
             </span>
             <span className="text-gray-300">·</span>
             <span>{stats.bestsellers} más vendidos</span>
+            {stats.hidden > 0 && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span className="text-red-500 font-medium">{stats.hidden} ocultos</span>
+              </>
+            )}
           </div>
+          {/* Drag disabled notice */}
+          {hasActiveFilter && (
+            <div className="mt-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+              Reordenar deshabilitado mientras hay filtros activos. Quita la búsqueda y categoría para reordenar.
+            </div>
+          )}
         </div>
 
         {/* Product Grid */}
@@ -365,115 +614,58 @@ export function AdminPanel() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-            {filteredProducts.map((product) => {
-              const imgCount = getImageCount(product);
-              const mainImg = getImageUrl(product, 0);
-              const hasNoImages = imgCount === 0;
-              const subcats = (product.subcategories ?? []).filter(Boolean);
-
-              return (
-                <div
-                  key={product._id}
-                  className={`group bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden ${
-                    hasNoImages ? 'border-2 border-dashed border-orange-300' : ''
-                  }`}
-                >
-                  {/* Image area */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+          >
+            <SortableContext
+              items={filteredProducts.map((p) => p._id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+                {filteredProducts.map((product) => (
+                  <SortableProductCard
+                    key={product._id}
+                    product={product}
+                    disabled={hasActiveFilter}
+                    getImageCount={getImageCount}
+                    getImageUrl={getImageUrl}
+                    getCategoryName={getCategoryName}
+                    onToggleBestseller={toggleBestseller}
+                    onToggleVisibility={handleToggleVisibility}
+                    onEdit={openEditModal}
+                    onDelete={setDeletingProduct}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+            <DragOverlay>
+              {activeProduct && (
+                <div className="bg-white rounded-xl shadow-2xl overflow-hidden opacity-90 rotate-2 w-[280px]">
                   <div className="aspect-[4/3] relative overflow-hidden bg-gray-50">
-                    {mainImg ? (
+                    {getImageUrl(activeProduct, 0) ? (
                       <img
-                        src={mainImg}
-                        alt={product.name}
-                        loading="lazy"
-                        className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+                        src={getImageUrl(activeProduct, 0)!}
+                        alt={activeProduct.name}
+                        className="w-full h-full object-contain p-2"
                       />
                     ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
-                        <ImageIcon className="w-12 h-12 text-orange-300 mb-2" />
-                        <span className="text-orange-400 text-xs font-medium">Sin imagen</span>
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
+                        <ImageIcon className="w-12 h-12 text-orange-300" />
                       </div>
                     )}
-
-                    {/* Bestseller star - top left */}
-                    <button
-                      onClick={(e) => toggleBestseller(product._id, e)}
-                      className={`absolute top-2 left-2 p-1.5 rounded-full transition-all ${
-                        product.isBestseller
-                          ? 'bg-yellow-400 text-white shadow-md'
-                          : 'bg-white/80 text-gray-400 hover:bg-yellow-100 hover:text-yellow-500'
-                      }`}
-                      title={product.isBestseller ? 'Quitar más vendido' : 'Marcar más vendido'}
-                    >
-                      <Star className="w-4 h-4" fill={product.isBestseller ? 'currentColor' : 'none'} />
-                    </button>
-
-                    {/* Image count - top right */}
-                    <div
-                      className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-xs font-bold ${
-                        imgCount === 7
-                          ? 'bg-green-100 text-green-700'
-                          : imgCount > 0
-                          ? 'bg-orange-100 text-orange-700'
-                          : 'bg-gray-200 text-gray-500'
-                      }`}
-                    >
-                      {imgCount}/7
-                    </div>
-
-                    {/* Code badge - bottom right */}
-                    <div className="absolute bottom-2 right-2">
-                      <span className="inline-block bg-gradient-to-r from-cyan-400 to-blue-500 text-white px-2 py-0.5 rounded-lg text-xs font-bold shadow-md">
-                        {product.code}
-                      </span>
-                    </div>
                   </div>
-
-                  {/* Card body */}
                   <div className="p-3">
-                    <h3 className="font-bold text-gray-800 text-sm leading-tight line-clamp-2 mb-1">
-                      {product.name}
-                    </h3>
-                    <p className="text-xs text-gray-500 mb-2">
-                      {categoryEmojis[getCategoryName(product.categoryId)] || '🎂'}{' '}
-                      {getCategoryName(product.categoryId)}
-                    </p>
-
-                    {/* Subcategory pills */}
-                    {subcats.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {subcats.map((sub, i) => (
-                          <span
-                            key={i}
-                            className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px] font-medium"
-                          >
-                            {sub}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => openEditModal(product)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 transition-colors text-xs font-semibold"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => setDeletingProduct(product)}
-                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-xs font-semibold"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <h3 className="font-bold text-gray-800 text-sm">{activeProduct.name}</h3>
+                    <p className="text-xs text-gray-500">{activeProduct.code}</p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </DragOverlay>
+          </DndContext>
         )}
       </main>
 
