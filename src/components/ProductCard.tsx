@@ -37,7 +37,7 @@ export function ProductCard({ product, variants = [], mainImage }: ProductCardPr
     .filter(Boolean);
 
   const handleVariantClick = (index: number) => {
-    setSelectedVariantIndex(index);
+    setSelectedVariantIndex(index === selectedVariantIndex ? -1 : index);
     setImageLoaded(false);
     setImageError(false);
   };
@@ -55,16 +55,15 @@ export function ProductCard({ product, variants = [], mainImage }: ProductCardPr
           {currentImage && !imageError ? (
             <>
               {!imageLoaded && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-                  <div className="animate-spin rounded-full h-8 w-8 border-4 border-cyan-400 border-t-transparent"></div>
-                </div>
+                <div className="absolute inset-0 bg-white" />
               )}
               <img
+                key={currentImage}
                 src={currentImage}
                 alt={product.name}
                 loading="lazy"
                 decoding="async"
-                className={`w-full h-full object-contain p-2 transition-all duration-300 ${
+                className={`w-full h-full object-contain p-2 transition-opacity duration-500 ease-in-out ${
                   imageLoaded ? 'opacity-100' : 'opacity-0'
                 } group-hover/image:scale-105`}
                 onLoad={() => setImageLoaded(true)}
@@ -128,20 +127,6 @@ export function ProductCard({ product, variants = [], mainImage }: ProductCardPr
                 Variantes:
               </p>
               <div className="flex flex-wrap justify-center gap-2 sm:gap-2.5">
-                {mainImage && (
-                  <button
-                    onClick={handleMainImageClick}
-                    aria-label={`Ver imagen principal de ${product.name}`}
-                    aria-pressed={selectedVariantIndex === -1}
-                    className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-sm font-medium transition-all duration-200 touch-manipulation ${
-                      selectedVariantIndex === -1
-                        ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 active:bg-gray-200'
-                    }`}
-                  >
-                    Principal
-                  </button>
-                )}
                 {variants.map((variant, index) => (
                   variant.variantName && (
                     <button

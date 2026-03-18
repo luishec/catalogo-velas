@@ -19,6 +19,7 @@ export interface Category {
   _creationTime: number;
   name: string;
   priority: number;
+  emoji?: string;
 }
 
 export interface ProductVariant {

@@ -6,6 +6,7 @@ interface Category {
   _id: string;
   name: string;
   priority: number;
+  emoji?: string;
 }
 
 interface CatalogHeaderProps {
@@ -14,23 +15,14 @@ interface CatalogHeaderProps {
   productCounts?: Record<string, number>;
 }
 
-const categoryEmojis: Record<string, string> = {
-  'NÚMEROS': '🔢',
-  'LETRAS': '🔤',
-  'FIGURAS': '🎭',
-  'MINI VELAS': '🕯️',
-  'VELITAS LARGAS': '🕯️',
-  'VOLCÁN': '🌋',
-};
-
 export function CatalogHeader({ categories = [], onSelectCategory, productCounts = {} }: CatalogHeaderProps) {
   const navigate = useNavigate();
   const [clickCount, setClickCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (clickCount >= 10) {
-      navigate('/admin/login');
+    if (clickCount >= 3) {
+      navigate('/admin');
       setClickCount(0);
     }
   }, [clickCount, navigate]);

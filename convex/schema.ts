@@ -5,6 +5,7 @@ export default defineSchema({
   categories: defineTable({
     name: v.string(),
     priority: v.number(),
+    emoji: v.optional(v.string()),
   }).index("by_priority", ["priority"]),
 
   products: defineTable({

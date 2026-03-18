@@ -2,6 +2,7 @@ interface Category {
   _id: string;
   name: string;
   priority: number;
+  emoji?: string;
 }
 
 interface CategoryFilterProps {
@@ -11,24 +12,12 @@ interface CategoryFilterProps {
   productCounts: Record<string, number>;
 }
 
-const categoryEmojis: Record<string, string> = {
-  'NÚMEROS': '🔢',
-  'LETRAS': '🔤',
-  'FIGURAS': '🎭',
-  'MINI VELAS': '🕯️',
-  'VELITAS LARGAS': '🕯️',
-  'VOLCÁN': '🌋'
-};
-
 export function CategoryFilter({
   categories,
   selectedCategory,
   onSelectCategory,
   productCounts
 }: CategoryFilterProps) {
-  const getEmoji = (name: string) => {
-    return categoryEmojis[name] || '🎂';
-  };
 
   return (
     <aside
@@ -56,7 +45,7 @@ export function CategoryFilter({
             >
               <div className="flex justify-between items-center gap-2">
                 <span className="flex items-center gap-1.5 sm:gap-2">
-                  <span className="text-base sm:text-xl" aria-hidden="true">{getEmoji(category.name)}</span>
+                  <span className="text-base sm:text-xl" aria-hidden="true">{category.emoji || '🎂'}</span>
                   <span className="text-xs sm:text-sm">{category.name}</span>
                 </span>
                 <span

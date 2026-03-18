@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LogOut, Upload, Save, X, Image as ImageIcon, Plus,
-  Trash2, Search, Star, Pencil, Eye, EyeOff, GripVertical
+  Trash2, Search, Star, Pencil, Eye, EyeOff, GripVertical, RefreshCw
 } from 'lucide-react';
 import type { Product, Category } from '../types';
 import { Id } from '../../convex/_generated/dataModel';
@@ -28,21 +28,16 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-const categoryEmojis: Record<string, string> = {
-  'NÚMEROS': '🔢',
-  'LETRAS': '🔤',
-  'FIGURAS': '🎭',
-  'MINI VELAS': '🕯️',
-  'VELITAS LARGAS': '🕯️',
-  'VOLCÁN': '🌋',
-};
-
 interface SortableProductCardProps {
   product: Product;
   disabled: boolean;
   getImageCount: (p: Product) => number;
   getImageUrl: (p: Product, i: number) => string | null;
   getCategoryName: (id?: Id<'categories'>) => string;
+  getCategoryEmoji: (id?: Id<'categories'>) => string;
+  imageSizes?: Record<string, number> | null;
+  formatFileSize: (bytes: number) => string;
+  getFileSizeColor: (bytes: number) => { bg: string; text: string; ring: string };
   onToggleBestseller: (id: Id<'products'>, e: React.MouseEvent) => void;
   onToggleVisibility: (id: Id<'products'>, e: React.MouseEvent) => void;
   onEdit: (p: Product) => void;
@@ -50,8 +45,8 @@ interface SortableProductCardProps {
 }
 
 function SortableProductCard({
-  product, disabled, getImageCount, getImageUrl, getCategoryName,
-  onToggleBestseller, onToggleVisibility, onEdit, onDelete,
+  product, disabled, getImageCount, getImageUrl, getCategoryName, getCategoryEmoji,
+  imageSizes, formatFileSize, getFileSizeColor, onToggleBestseller, onToggleVisibility, onEdit, onDelete,
 }: SortableProductCardProps) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -153,18 +148,18 @@ function SortableProductCard({
       </div>
 
       {/* Card body */}
-      <div className="p-3">
+      <div className="p-3 text-center">
         <h3 className="font-bold text-gray-800 text-sm leading-tight line-clamp-2 mb-1">
           {product.name}
         </h3>
         <p className="text-xs text-gray-500 mb-2">
-          {categoryEmojis[getCategoryName(product.categoryId)] || '🎂'}{' '}
+          {getCategoryEmoji(product.categoryId)}{' '}
           {getCategoryName(product.categoryId)}
         </p>
 
         {/* Subcategory pills */}
         {subcats.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
+          <div className="flex flex-wrap justify-center gap-1 mb-3">
             {subcats.map((sub, i) => (
               <span
                 key={i}
@@ -211,11 +206,33 @@ export function AdminPanel() {
   const reorderMut = useMutation(api.products.reorder);
   const updateSubcategoriesMut = useMutation(api.products.updateSubcategories);
   const updateProductImageMut = useMutation(api.products.updateProductImage);
+  const addCategoryMut = useMutation(api.categories.add);
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
 
   const products = (productsData as Product[] | undefined) ?? [];
   const categories = (categoriesData as Category[] | undefined) ?? [];
   const dataLoading = productsData === undefined || categoriesData === undefined;
+
+  const allStorageIds = useMemo(
+    () => products.flatMap((p) => (p.imageStorageIds ?? []).filter(Boolean)),
+    [products]
+  );
+  const imageSizesGlobal = useQuery(
+    api.files.getImageSizes,
+    allStorageIds.length > 0 ? { storageIds: allStorageIds } : "skip"
+  );
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getFileSizeColor = (bytes: number) => {
+    if (bytes < 100 * 1024) return { bg: 'bg-green-500', text: 'text-green-600', ring: 'ring-green-400' };
+    if (bytes < 200 * 1024) return { bg: 'bg-yellow-500', text: 'text-yellow-600', ring: 'ring-yellow-400' };
+    return { bg: 'bg-red-500', text: 'text-red-600', ring: 'ring-red-400' };
+  };
 
   // UI state
   const [searchTerm, setSearchTerm] = useState('');
@@ -226,6 +243,10 @@ export function AdminPanel() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Add category modal
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [newCategory, setNewCategory] = useState({ name: '', emoji: '', priority: 0 });
 
   // Add product form
   const [newProduct, setNewProduct] = useState({ code: '', name: '', category_id: '' });
@@ -241,7 +262,13 @@ export function AdminPanel() {
   );
 
   // Auth guard
-  if (authLoading) {
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/admin/login', { replace: true });
+    }
+  }, [authLoading, user, navigate]);
+
+  if (authLoading || !user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-gray-600">Verificando sesión...</div>
@@ -249,13 +276,8 @@ export function AdminPanel() {
     );
   }
 
-  if (!user) {
-    navigate('/admin/login');
-    return null;
-  }
-
   // === Filtering & Stats ===
-  const hasActiveFilter = searchTerm !== '' || selectedCategory !== null;
+  const hasActiveFilter = searchTerm !== '';
 
   const filteredProducts = products.filter((p) => {
     const matchesSearch =
@@ -434,6 +456,40 @@ export function AdminPanel() {
     return categories.find((c) => c._id === categoryId)?.name || 'Sin categoría';
   };
 
+  const getCategoryEmoji = (categoryId?: Id<'categories'>): string => {
+    if (!categoryId) return '🎂';
+    return categories.find((c) => c._id === categoryId)?.emoji || '🎂';
+  };
+
+  const handleAddCategory = async () => {
+    if (!token || !newCategory.name.trim()) return;
+    try {
+      const nextPriority = newCategory.priority || (categories.length > 0
+        ? Math.max(...categories.map((c) => c.priority)) + 1
+        : 1);
+      await addCategoryMut({
+        token,
+        name: newCategory.name,
+        emoji: newCategory.emoji || undefined,
+        priority: nextPriority,
+      });
+      setShowAddCategoryModal(false);
+      setNewCategory({ name: '', emoji: '', priority: 0 });
+      showMessage('success', 'Categoría agregada');
+    } catch (error: any) {
+      console.error('Error adding category:', error);
+      showMessage('error', error.message || 'Error al agregar categoría');
+    }
+  };
+
+  // === Products grouped by category ===
+  const productsByCategory = categories
+    .map((category) => ({
+      category,
+      products: filteredProducts.filter((p) => p.categoryId === category._id),
+    }))
+    .filter((group) => group.products.length > 0);
+
   // === Drag & Drop ===
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
@@ -444,11 +500,19 @@ export function AdminPanel() {
     const { active, over } = event;
     if (!over || active.id === over.id || !token) return;
 
-    const oldIndex = filteredProducts.findIndex((p) => p._id === active.id);
-    const newIndex = filteredProducts.findIndex((p) => p._id === over.id);
+    // Find which category this drag belongs to
+    const activeProduct = filteredProducts.find((p) => p._id === active.id);
+    if (!activeProduct) return;
+
+    const categoryProducts = filteredProducts.filter(
+      (p) => p.categoryId === activeProduct.categoryId
+    );
+
+    const oldIndex = categoryProducts.findIndex((p) => p._id === active.id);
+    const newIndex = categoryProducts.findIndex((p) => p._id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const reordered = arrayMove(filteredProducts, oldIndex, newIndex);
+    const reordered = arrayMove(categoryProducts, oldIndex, newIndex);
     const updates = reordered.map((p, i) => ({
       productId: p._id,
       order: (i + 1) * 1000,
@@ -515,13 +579,22 @@ export function AdminPanel() {
                 />
               </div>
             </div>
-            <button
-              onClick={handleSignOut}
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm flex-shrink-0"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Cerrar Sesión</span>
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => navigate('/')}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm"
+              >
+                <Eye className="w-4 h-4" />
+                <span className="hidden sm:inline">Ver Catálogo</span>
+              </button>
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Cerrar Sesión</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -553,7 +626,7 @@ export function AdminPanel() {
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    <span>{categoryEmojis[cat.name] || '🎂'}</span>
+                    <span>{cat.emoji || '🎂'}</span>
                     <span>{cat.name}</span>
                     <span
                       className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
@@ -566,14 +639,29 @@ export function AdminPanel() {
                 ))}
               </div>
             </div>
-            {/* Add button */}
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold text-sm flex-shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              Agregar Producto
-            </button>
+            {/* Add buttons */}
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => {
+                  const nextPriority = categories.length > 0
+                    ? Math.max(...categories.map((c) => c.priority)) + 1
+                    : 1;
+                  setNewCategory({ name: '', emoji: '', priority: nextPriority });
+                  setShowAddCategoryModal(true);
+                }}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-semibold text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Agregar Categoría
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Agregar Producto
+              </button>
+            </div>
           </div>
           {/* Stats */}
           <div className="flex gap-3 sm:gap-4 mt-3 pt-3 border-t border-gray-100 text-xs sm:text-sm text-gray-500">
@@ -594,12 +682,12 @@ export function AdminPanel() {
           {/* Drag disabled notice */}
           {hasActiveFilter && (
             <div className="mt-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
-              Reordenar deshabilitado mientras hay filtros activos. Quita la búsqueda y categoría para reordenar.
+              Reordenar deshabilitado mientras hay búsqueda activa. Quita la búsqueda para reordenar.
             </div>
           )}
         </div>
 
-        {/* Product Grid */}
+        {/* Product Grid - grouped by category */}
         {filteredProducts.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <ImageIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
@@ -614,58 +702,84 @@ export function AdminPanel() {
             )}
           </div>
         ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <SortableContext
-              items={filteredProducts.map((p) => p._id)}
-              strategy={rectSortingStrategy}
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-                {filteredProducts.map((product) => (
-                  <SortableProductCard
-                    key={product._id}
-                    product={product}
-                    disabled={hasActiveFilter}
-                    getImageCount={getImageCount}
-                    getImageUrl={getImageUrl}
-                    getCategoryName={getCategoryName}
-                    onToggleBestseller={toggleBestseller}
-                    onToggleVisibility={handleToggleVisibility}
-                    onEdit={openEditModal}
-                    onDelete={setDeletingProduct}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-            <DragOverlay>
-              {activeProduct && (
-                <div className="bg-white rounded-xl shadow-2xl overflow-hidden opacity-90 rotate-2 w-[280px]">
-                  <div className="aspect-[4/3] relative overflow-hidden bg-gray-50">
-                    {getImageUrl(activeProduct, 0) ? (
-                      <img
-                        src={getImageUrl(activeProduct, 0)!}
-                        alt={activeProduct.name}
-                        className="w-full h-full object-contain p-2"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
-                        <ImageIcon className="w-12 h-12 text-orange-300" />
+          <div className="space-y-6 sm:space-y-8">
+            {productsByCategory.map(({ category, products: catProducts }) => {
+              const dndDisabled = hasActiveFilter;
+              return (
+                <section key={category._id}>
+                  {/* Category header - only when showing all categories */}
+                  {selectedCategory === null && (
+                    <div className="mb-3 sm:mb-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-xl px-4 py-2.5 sm:px-5 sm:py-3 shadow-md flex items-center justify-center gap-3">
+                      <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                        <span>{category.emoji || '🎂'}</span>
+                        {category.name}
+                      </h2>
+                      <span className="bg-white/25 text-white text-sm font-bold px-3 py-1 rounded-full">
+                        {catProducts.length}
+                      </span>
+                    </div>
+                  )}
+
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={handleDragCancel}
+                  >
+                    <SortableContext
+                      items={catProducts.map((p) => p._id)}
+                      strategy={rectSortingStrategy}
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+                        {catProducts.map((product) => (
+                          <SortableProductCard
+                            key={product._id}
+                            product={product}
+                            disabled={dndDisabled}
+                            getImageCount={getImageCount}
+                            getImageUrl={getImageUrl}
+                            getCategoryName={getCategoryName}
+                            getCategoryEmoji={getCategoryEmoji}
+                            imageSizes={imageSizesGlobal}
+                            formatFileSize={formatFileSize}
+                            getFileSizeColor={getFileSizeColor}
+                            onToggleBestseller={toggleBestseller}
+                            onToggleVisibility={handleToggleVisibility}
+                            onEdit={openEditModal}
+                            onDelete={setDeletingProduct}
+                          />
+                        ))}
                       </div>
-                    )}
-                  </div>
-                  <div className="p-3">
-                    <h3 className="font-bold text-gray-800 text-sm">{activeProduct.name}</h3>
-                    <p className="text-xs text-gray-500">{activeProduct.code}</p>
-                  </div>
-                </div>
-              )}
-            </DragOverlay>
-          </DndContext>
+                    </SortableContext>
+                    <DragOverlay>
+                      {activeProduct && (
+                        <div className="bg-white rounded-xl shadow-2xl overflow-hidden opacity-90 rotate-2 w-[280px]">
+                          <div className="aspect-[4/3] relative overflow-hidden bg-gray-50">
+                            {getImageUrl(activeProduct, 0) ? (
+                              <img
+                                src={getImageUrl(activeProduct, 0)!}
+                                alt={activeProduct.name}
+                                className="w-full h-full object-contain p-2"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
+                                <ImageIcon className="w-12 h-12 text-orange-300" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-3">
+                            <h3 className="font-bold text-gray-800 text-sm">{activeProduct.name}</h3>
+                            <p className="text-xs text-gray-500">{activeProduct.code}</p>
+                          </div>
+                        </div>
+                      )}
+                    </DragOverlay>
+                  </DndContext>
+                </section>
+              );
+            })}
+          </div>
         )}
       </main>
 
@@ -702,52 +816,60 @@ export function AdminPanel() {
                   {[0, 1, 2, 3, 4, 5, 6].map((index) => {
                     const imgUrl = getImageUrl(editingProduct, index);
                     const isUploading = uploading === `${editingProduct._id}-${index}`;
+                    const storageId = editingProduct.imageStorageIds?.[index];
+                    const fileSize = storageId && imageSizesGlobal?.[storageId];
                     return (
-                      <label
-                        key={index}
-                        className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer group/slot transition-all ${
-                          imgUrl
-                            ? 'border-2 border-cyan-200 hover:border-cyan-400'
-                            : 'border-2 border-dashed border-gray-300 hover:border-cyan-400 bg-gray-50'
-                        }`}
-                      >
-                        {isUploading ? (
-                          <div className="absolute inset-0 flex items-center justify-center bg-white/80">
-                            <div className="animate-spin rounded-full h-6 w-6 border-3 border-cyan-400 border-t-transparent"></div>
-                          </div>
-                        ) : imgUrl ? (
-                          <>
-                            <img
-                              src={imgUrl}
-                              alt={`Imagen ${index + 1}`}
-                              className="w-full h-full object-contain p-1"
-                            />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center justify-center">
-                              <Upload className="w-5 h-5 text-white" />
+                      <div key={index} className="flex flex-col items-center">
+                        <label
+                          className={`relative aspect-square w-full rounded-xl overflow-hidden cursor-pointer group/slot transition-all ${
+                            imgUrl
+                              ? 'border-2 border-cyan-200 hover:border-cyan-400'
+                              : 'border-2 border-dashed border-gray-300 hover:border-cyan-400 bg-gray-50'
+                          }`}
+                        >
+                          {isUploading ? (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/80">
+                              <div className="animate-spin rounded-full h-6 w-6 border-3 border-cyan-400 border-t-transparent"></div>
                             </div>
-                          </>
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                            <Upload className="w-5 h-5 mb-1" />
-                            <span className="text-[10px]">Subir</span>
+                          ) : imgUrl ? (
+                            <>
+                              <img
+                                src={imgUrl}
+                                alt={`Imagen ${index + 1}`}
+                                className="w-full h-full object-contain p-1"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center justify-center">
+                                <RefreshCw className="w-5 h-5 text-white" />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                              <Upload className="w-5 h-5 mb-1" />
+                              <span className="text-[10px]">Subir</span>
+                            </div>
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleImageUpload(editingProduct._id, file, index);
+                              e.target.value = '';
+                            }}
+                            className="hidden"
+                            disabled={isUploading}
+                          />
+                          {/* Slot label */}
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] text-center py-0.5 font-medium">
+                            {index === 0 ? 'Principal' : subcategoryValues[index] || `Slot ${index}`}
                           </div>
+                        </label>
+                        {fileSize && (
+                          <span className={`${getFileSizeColor(fileSize).bg} text-white px-2 py-0.5 rounded-full text-[10px] font-semibold mt-1 shadow-sm`}>
+                            {formatFileSize(fileSize)}
+                          </span>
                         )}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleImageUpload(editingProduct._id, file, index);
-                            e.target.value = '';
-                          }}
-                          className="hidden"
-                          disabled={isUploading}
-                        />
-                        {/* Slot label */}
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] text-center py-0.5 font-medium">
-                          {index === 0 ? 'Principal' : subcategoryValues[index] || `Slot ${index}`}
-                        </div>
-                      </label>
+                      </div>
                     );
                   })}
                 </div>
@@ -910,6 +1032,88 @@ export function AdminPanel() {
                     setShowAddModal(false);
                     setNewProduct({ code: '', name: '', category_id: '' });
                     setFormErrors({});
+                  }}
+                  className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === ADD CATEGORY MODAL === */}
+      {showAddCategoryModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-800">Agregar Categoría</h2>
+              <button
+                onClick={() => {
+                  setShowAddCategoryModal(false);
+                  setNewCategory({ name: '', emoji: '', priority: 0 });
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Nombre de la Categoría
+                </label>
+                <input
+                  type="text"
+                  value={newCategory.name}
+                  onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-purple-400"
+                  placeholder="Ej: FIGURAS"
+                  maxLength={50}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Emoji
+                </label>
+                <input
+                  type="text"
+                  value={newCategory.emoji}
+                  onChange={(e) => setNewCategory({ ...newCategory, emoji: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-purple-400"
+                  placeholder="Ej: 🎭"
+                  maxLength={4}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Prioridad (orden)
+                </label>
+                <input
+                  type="number"
+                  value={newCategory.priority}
+                  onChange={(e) => setNewCategory({ ...newCategory, priority: parseInt(e.target.value) || 0 })}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-purple-400"
+                  min={1}
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleAddCategory}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-semibold"
+                >
+                  <Plus className="w-5 h-5" />
+                  Agregar
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddCategoryModal(false);
+                    setNewCategory({ name: '', emoji: '', priority: 0 });
                   }}
                   className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold"
                 >
