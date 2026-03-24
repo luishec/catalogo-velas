@@ -21,7 +21,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, variants = [], mainImage }: ProductCardProps) {
-  const [selectedVariantIndex, setSelectedVariantIndex] = useState(-1);
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState(variants.length > 0 ? 0 : -1);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [bestsellerTooltipState, setBestsellerTooltipState] = useState<'hidden' | 'visible' | 'fading'>('hidden');
@@ -37,15 +37,24 @@ export function ProductCard({ product, variants = [], mainImage }: ProductCardPr
     .filter(Boolean);
 
   const handleVariantClick = (index: number) => {
-    setSelectedVariantIndex(index === selectedVariantIndex ? -1 : index);
-    setImageLoaded(false);
-    setImageError(false);
+    const newIndex = index === selectedVariantIndex ? -1 : index;
+    const newImage = newIndex === -1
+      ? (mainImage || product.imageUrl)
+      : (variants[newIndex]?.imageUrl || product.imageUrl);
+    setSelectedVariantIndex(newIndex);
+    if (newImage !== currentImage) {
+      setImageLoaded(false);
+      setImageError(false);
+    }
   };
 
   const handleMainImageClick = () => {
+    const newImage = mainImage || product.imageUrl;
     setSelectedVariantIndex(-1);
-    setImageLoaded(false);
-    setImageError(false);
+    if (newImage !== currentImage) {
+      setImageLoaded(false);
+      setImageError(false);
+    }
   };
 
   return (

@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LogOut, Upload, Save, X, Image as ImageIcon, Plus,
-  Trash2, Search, Star, Pencil, Eye, EyeOff, GripVertical, RefreshCw
+  Trash2, Search, Star, Pencil, Eye, EyeOff, GripVertical, RefreshCw, LayoutGrid, List
 } from 'lucide-react';
 import type { Product, Category } from '../types';
 import { Id } from '../../convex/_generated/dataModel';
@@ -23,6 +23,7 @@ import {
 import {
   SortableContext,
   rectSortingStrategy,
+  verticalListSortingStrategy,
   useSortable,
   arrayMove,
 } from '@dnd-kit/sortable';
@@ -42,6 +43,116 @@ interface SortableProductCardProps {
   onToggleVisibility: (id: Id<'products'>, e: React.MouseEvent) => void;
   onEdit: (p: Product) => void;
   onDelete: (p: Product) => void;
+}
+
+interface SortableListRowProps {
+  product: Product;
+  index: number;
+  disabled: boolean;
+  getImageUrl: (p: Product, i: number) => string | null;
+  getCategoryName: (id?: Id<'categories'>) => string;
+  getCategoryEmoji: (id?: Id<'categories'>) => string;
+  onEdit: (p: Product) => void;
+  onDelete: (p: Product) => void;
+}
+
+function SortableListRow({
+  product, index, disabled, getImageUrl, getCategoryName, getCategoryEmoji, onEdit, onDelete,
+}: SortableListRowProps) {
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id: product._id, disabled });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : undefined,
+  };
+
+  const mainImg = getImageUrl(product, 0);
+  const subcats = (product.subcategories ?? []).filter(Boolean);
+  const isHidden = product.isVisible === false;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-all px-3 py-2 ${
+        isHidden ? 'opacity-50 border border-dashed border-red-400' : ''
+      }`}
+    >
+      {/* Order number */}
+      <span className="text-xs font-bold text-gray-400 w-6 text-center flex-shrink-0">
+        {index + 1}
+      </span>
+
+      {/* Drag handle */}
+      {!disabled && (
+        <button
+          {...attributes}
+          {...listeners}
+          className="p-1 rounded text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0"
+        >
+          <GripVertical className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* Thumbnail */}
+      <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50 border border-gray-200">
+        {mainImg ? (
+          <img src={mainImg} alt={product.name} className="w-full h-full object-contain p-1" loading="lazy" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <ImageIcon className="w-5 h-5 text-gray-300" />
+          </div>
+        )}
+      </div>
+
+      {/* Product info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="inline-block bg-gradient-to-r from-cyan-400 to-blue-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold">
+            {product.code}
+          </span>
+          {product.isBestseller && (
+            <Star className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="currentColor" />
+          )}
+          {isHidden && (
+            <EyeOff className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+          )}
+        </div>
+        <p className="text-sm font-semibold text-gray-800 truncate">{product.name}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[11px] text-gray-500">
+            {getCategoryEmoji(product.categoryId)} {getCategoryName(product.categoryId)}
+          </span>
+          {subcats.length > 0 && (
+            <span className="text-[11px] text-gray-400">
+              · {subcats.join(', ')}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-1.5 flex-shrink-0">
+        <button
+          onClick={() => onEdit(product)}
+          className="p-2 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 transition-colors"
+          title="Editar"
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => onDelete(product)}
+          className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+          title="Eliminar"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function SortableProductCard({
@@ -243,6 +354,7 @@ export function AdminPanel() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Add category modal
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
@@ -413,21 +525,24 @@ export function AdminPanel() {
     }
   };
 
-  const handleUpdateSubcategories = async () => {
-    if (!token || !editingProduct) return;
-    try {
-      await updateSubcategoriesMut({
-        token,
-        productId: editingProduct._id,
-        subcategories: subcategoryValues,
-      });
-      setEditingProduct(null);
-      showMessage('success', 'Subcategorías actualizadas');
-    } catch (error) {
-      console.error('Error updating subcategories:', error);
-      showMessage('error', 'Error al actualizar las subcategorías');
-    }
-  };
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const autoSaveSubcategories = useCallback((values: string[]) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      if (!token || !editingProduct) return;
+      try {
+        await updateSubcategoriesMut({
+          token,
+          productId: editingProduct._id,
+          subcategories: values,
+        });
+      } catch (error) {
+        console.error('Error updating subcategories:', error);
+        showMessage('error', 'Error al actualizar las subcategorías');
+      }
+    }, 500);
+  }, [token, editingProduct, updateSubcategoriesMut, showMessage]);
 
   const openEditModal = (product: Product) => {
     setEditingProduct(product);
@@ -641,6 +756,31 @@ export function AdminPanel() {
             </div>
             {/* Add buttons */}
             <div className="flex gap-2 flex-shrink-0">
+              {/* View mode toggle */}
+              <div className="flex bg-gray-100 rounded-lg p-0.5">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 rounded-md transition-all ${
+                    viewMode === 'grid'
+                      ? 'bg-white text-cyan-600 shadow-sm'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                  title="Vista tarjetas"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-2 rounded-md transition-all ${
+                    viewMode === 'list'
+                      ? 'bg-white text-cyan-600 shadow-sm'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                  title="Vista lista"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
               <button
                 onClick={() => {
                   const nextPriority = categories.length > 0
@@ -652,14 +792,14 @@ export function AdminPanel() {
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-semibold text-sm"
               >
                 <Plus className="w-4 h-4" />
-                Agregar Categoría
+                <span className="hidden sm:inline">Agregar Categoría</span>
               </button>
               <button
                 onClick={() => setShowAddModal(true)}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold text-sm"
               >
                 <Plus className="w-4 h-4" />
-                Agregar Producto
+                <span className="hidden sm:inline">Agregar Producto</span>
               </button>
             </div>
           </div>
@@ -729,31 +869,49 @@ export function AdminPanel() {
                   >
                     <SortableContext
                       items={catProducts.map((p) => p._id)}
-                      strategy={rectSortingStrategy}
+                      strategy={viewMode === 'list' ? verticalListSortingStrategy : rectSortingStrategy}
                     >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-                        {catProducts.map((product) => (
-                          <SortableProductCard
-                            key={product._id}
-                            product={product}
-                            disabled={dndDisabled}
-                            getImageCount={getImageCount}
-                            getImageUrl={getImageUrl}
-                            getCategoryName={getCategoryName}
-                            getCategoryEmoji={getCategoryEmoji}
-                            imageSizes={imageSizesGlobal}
-                            formatFileSize={formatFileSize}
-                            getFileSizeColor={getFileSizeColor}
-                            onToggleBestseller={toggleBestseller}
-                            onToggleVisibility={handleToggleVisibility}
-                            onEdit={openEditModal}
-                            onDelete={setDeletingProduct}
-                          />
-                        ))}
-                      </div>
+                      {viewMode === 'grid' ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+                          {catProducts.map((product) => (
+                            <SortableProductCard
+                              key={product._id}
+                              product={product}
+                              disabled={dndDisabled}
+                              getImageCount={getImageCount}
+                              getImageUrl={getImageUrl}
+                              getCategoryName={getCategoryName}
+                              getCategoryEmoji={getCategoryEmoji}
+                              imageSizes={imageSizesGlobal}
+                              formatFileSize={formatFileSize}
+                              getFileSizeColor={getFileSizeColor}
+                              onToggleBestseller={toggleBestseller}
+                              onToggleVisibility={handleToggleVisibility}
+                              onEdit={openEditModal}
+                              onDelete={setDeletingProduct}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {catProducts.map((product, idx) => (
+                            <SortableListRow
+                              key={product._id}
+                              product={product}
+                              index={idx}
+                              disabled={dndDisabled}
+                              getImageUrl={getImageUrl}
+                              getCategoryName={getCategoryName}
+                              getCategoryEmoji={getCategoryEmoji}
+                              onEdit={openEditModal}
+                              onDelete={setDeletingProduct}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </SortableContext>
                     <DragOverlay>
-                      {activeProduct && (
+                      {activeProduct && viewMode === 'grid' && (
                         <div className="bg-white rounded-xl shadow-2xl overflow-hidden opacity-90 rotate-2 w-[280px]">
                           <div className="aspect-[4/3] relative overflow-hidden bg-gray-50">
                             {getImageUrl(activeProduct, 0) ? (
@@ -770,6 +928,23 @@ export function AdminPanel() {
                           </div>
                           <div className="p-3">
                             <h3 className="font-bold text-gray-800 text-sm">{activeProduct.name}</h3>
+                            <p className="text-xs text-gray-500">{activeProduct.code}</p>
+                          </div>
+                        </div>
+                      )}
+                      {activeProduct && viewMode === 'list' && (
+                        <div className="flex items-center gap-3 bg-white rounded-xl shadow-2xl px-3 py-2 opacity-90 rotate-1">
+                          <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50 border border-gray-200">
+                            {getImageUrl(activeProduct, 0) ? (
+                              <img src={getImageUrl(activeProduct, 0)!} alt={activeProduct.name} className="w-full h-full object-contain p-1" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <ImageIcon className="w-5 h-5 text-gray-300" />
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800">{activeProduct.name}</p>
                             <p className="text-xs text-gray-500">{activeProduct.code}</p>
                           </div>
                         </div>
@@ -881,7 +1056,7 @@ export function AdminPanel() {
                   🎨 Subcategorías (variantes)
                 </h3>
                 <div className="space-y-2">
-                  {[1, 2, 3, 4, 5, 6].map((index) => {
+                  {[0, 1, 2, 3, 4, 5, 6].map((index) => {
                     const imgUrl = getImageUrl(editingProduct, index);
                     return (
                       <div key={index} className="flex items-center gap-2 sm:gap-3">
@@ -903,6 +1078,7 @@ export function AdminPanel() {
                             const newValues = [...subcategoryValues];
                             newValues[index] = e.target.value;
                             setSubcategoryValues(newValues);
+                            autoSaveSubcategories(newValues);
                           }}
                           className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
                           placeholder={`Subcategoría ${index}`}
@@ -917,17 +1093,10 @@ export function AdminPanel() {
             {/* Modal footer */}
             <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 sm:px-6 py-4 flex gap-3 rounded-b-2xl">
               <button
-                onClick={handleUpdateSubcategories}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold text-sm"
-              >
-                <Save className="w-4 h-4" />
-                Guardar Subcategorías
-              </button>
-              <button
                 onClick={() => setEditingProduct(null)}
-                className="px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-sm"
+                className="flex-1 px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-sm"
               >
-                Cancelar
+                Cerrar
               </button>
             </div>
           </div>
