@@ -317,7 +317,11 @@ export function AdminPanel() {
   const reorderMut = useMutation(api.products.reorder);
   const updateSubcategoriesMut = useMutation(api.products.updateSubcategories);
   const updateProductImageMut = useMutation(api.products.updateProductImage);
+  const updateProductMut = useMutation(api.products.updateProduct);
+  const deleteProductImageMut = useMutation(api.products.deleteProductImage);
   const addCategoryMut = useMutation(api.categories.add);
+  const updateCategoryMut = useMutation(api.categories.update);
+  const removeCategoryMut = useMutation(api.categories.remove);
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
 
   const products = (productsData as Product[] | undefined) ?? [];
@@ -366,6 +370,16 @@ export function AdminPanel() {
 
   // Subcategory editing
   const [subcategoryValues, setSubcategoryValues] = useState<string[]>(['', '', '', '', '', '', '']);
+
+  // Product field editing
+  const [editName, setEditName] = useState('');
+  const [editCode, setEditCode] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState('');
+
+  // Category editing
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [editCatName, setEditCatName] = useState('');
+  const [editCatEmoji, setEditCatEmoji] = useState('');
 
   // DnD sensors
   const sensors = useSensors(
@@ -546,11 +560,81 @@ export function AdminPanel() {
 
   const openEditModal = (product: Product) => {
     setEditingProduct(product);
+    setEditName(product.name);
+    setEditCode(product.code);
+    setEditCategoryId(product.categoryId ?? '');
     const subs = product.subcategories ?? [];
     setSubcategoryValues([
       subs[0] || '', subs[1] || '', subs[2] || '',
       subs[3] || '', subs[4] || '', subs[5] || '', subs[6] || '',
     ]);
+  };
+
+  const productDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const autoSaveProduct = useCallback((fields: { name?: string; code?: string; categoryId?: string }) => {
+    if (productDebounceRef.current) clearTimeout(productDebounceRef.current);
+    productDebounceRef.current = setTimeout(async () => {
+      if (!token || !editingProduct) return;
+      try {
+        await updateProductMut({
+          token,
+          productId: editingProduct._id,
+          ...(fields.name !== undefined ? { name: fields.name } : {}),
+          ...(fields.code !== undefined ? { code: fields.code } : {}),
+          ...(fields.categoryId !== undefined ? { categoryId: fields.categoryId as any } : {}),
+        });
+      } catch (error: any) {
+        showMessage('error', error.message || 'Error al actualizar producto');
+      }
+    }, 500);
+  }, [token, editingProduct, updateProductMut, showMessage]);
+
+  const handleDeleteImage = async (productId: string, imageIndex: number) => {
+    if (!token) return;
+    try {
+      await deleteProductImageMut({ token, productId: productId as any, imageIndex });
+      showMessage('success', 'Imagen eliminada');
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      showMessage('error', 'Error al eliminar la imagen');
+    }
+  };
+
+  const catDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const autoSaveCategory = useCallback((cat: Category, fields: { name?: string; emoji?: string }) => {
+    if (catDebounceRef.current) clearTimeout(catDebounceRef.current);
+    catDebounceRef.current = setTimeout(async () => {
+      if (!token) return;
+      try {
+        await updateCategoryMut({
+          token,
+          categoryId: cat._id,
+          ...(fields.name !== undefined ? { name: fields.name } : {}),
+          ...(fields.emoji !== undefined ? { emoji: fields.emoji } : {}),
+        });
+      } catch (error: any) {
+        showMessage('error', error.message || 'Error al actualizar categoría');
+      }
+    }, 500);
+  }, [token, updateCategoryMut, showMessage]);
+
+  const handleDeleteCategory = async (cat: Category) => {
+    if (!token) return;
+    const catProducts = products.filter((p) => p.categoryId === cat._id);
+    if (catProducts.length > 0) {
+      showMessage('error', `No se puede eliminar: tiene ${catProducts.length} producto(s) asignado(s)`);
+      return;
+    }
+    try {
+      await removeCategoryMut({ token, name: cat.name });
+      setEditingCategory(null);
+      showMessage('success', 'Categoría eliminada');
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      showMessage('error', 'Error al eliminar categoría');
+    }
   };
 
   const handleSignOut = async () => {
@@ -857,6 +941,17 @@ export function AdminPanel() {
                       <span className="bg-white/25 text-white text-sm font-bold px-3 py-1 rounded-full">
                         {catProducts.length}
                       </span>
+                      <button
+                        onClick={() => {
+                          setEditingCategory(category);
+                          setEditCatName(category.name);
+                          setEditCatEmoji(category.emoji || '');
+                        }}
+                        className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                        title="Editar categoría"
+                      >
+                        <Pencil className="w-4 h-4 text-white" />
+                      </button>
                     </div>
                   )}
 
@@ -964,14 +1059,9 @@ export function AdminPanel() {
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             {/* Modal header */}
             <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
-              <div>
-                <h2 className="text-lg sm:text-xl font-bold text-gray-800">
-                  Editar: {editingProduct.name}
-                </h2>
-                <span className="inline-block mt-1 bg-gradient-to-r from-cyan-400 to-blue-500 text-white px-2 py-0.5 rounded text-xs font-bold">
-                  {editingProduct.code}
-                </span>
-              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-gray-800">
+                Editar Producto
+              </h2>
               <button
                 onClick={() => setEditingProduct(null)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -981,6 +1071,58 @@ export function AdminPanel() {
             </div>
 
             <div className="px-4 sm:px-6 py-4 space-y-6">
+              {/* Product info section */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Pencil className="w-4 h-4" />
+                  Datos del Producto
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Código</label>
+                    <input
+                      type="text"
+                      value={editCode}
+                      onChange={(e) => {
+                        setEditCode(e.target.value);
+                        autoSaveProduct({ code: e.target.value });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Categoría</label>
+                    <select
+                      value={editCategoryId}
+                      onChange={(e) => {
+                        setEditCategoryId(e.target.value);
+                        autoSaveProduct({ categoryId: e.target.value });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
+                    >
+                      <option value="">Sin categoría</option>
+                      {categories.map((cat) => (
+                        <option key={cat._id} value={cat._id}>
+                          {cat.emoji || '🎂'} {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Nombre</label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => {
+                        setEditName(e.target.value);
+                        autoSaveProduct({ name: e.target.value });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Images section */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -995,50 +1137,62 @@ export function AdminPanel() {
                     const fileSize = storageId && imageSizesGlobal?.[storageId];
                     return (
                       <div key={index} className="flex flex-col items-center">
-                        <label
-                          className={`relative aspect-square w-full rounded-xl overflow-hidden cursor-pointer group/slot transition-all ${
-                            imgUrl
-                              ? 'border-2 border-cyan-200 hover:border-cyan-400'
-                              : 'border-2 border-dashed border-gray-300 hover:border-cyan-400 bg-gray-50'
-                          }`}
-                        >
-                          {isUploading ? (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/80">
-                              <div className="animate-spin rounded-full h-6 w-6 border-3 border-cyan-400 border-t-transparent"></div>
-                            </div>
-                          ) : imgUrl ? (
-                            <>
-                              <img
-                                src={imgUrl}
-                                alt={`Imagen ${index + 1}`}
-                                className="w-full h-full object-contain p-1"
-                              />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center justify-center">
-                                <RefreshCw className="w-5 h-5 text-white" />
+                        <div className="relative aspect-square w-full rounded-xl overflow-hidden">
+                          <label
+                            className={`block w-full h-full cursor-pointer group/slot transition-all ${
+                              imgUrl
+                                ? 'border-2 border-cyan-200 hover:border-cyan-400 rounded-xl overflow-hidden'
+                                : 'border-2 border-dashed border-gray-300 hover:border-cyan-400 bg-gray-50 rounded-xl overflow-hidden'
+                            }`}
+                          >
+                            {isUploading ? (
+                              <div className="absolute inset-0 flex items-center justify-center bg-white/80">
+                                <div className="animate-spin rounded-full h-6 w-6 border-3 border-cyan-400 border-t-transparent"></div>
                               </div>
-                            </>
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                              <Upload className="w-5 h-5 mb-1" />
-                              <span className="text-[10px]">Subir</span>
+                            ) : imgUrl ? (
+                              <>
+                                <img
+                                  src={imgUrl}
+                                  alt={`Imagen ${index + 1}`}
+                                  className="w-full h-full object-contain p-1"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center justify-center">
+                                  <RefreshCw className="w-5 h-5 text-white" />
+                                </div>
+                              </>
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                                <Upload className="w-5 h-5 mb-1" />
+                                <span className="text-[10px]">Subir</span>
+                              </div>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleImageUpload(editingProduct._id, file, index);
+                                e.target.value = '';
+                              }}
+                              className="hidden"
+                              disabled={isUploading}
+                            />
+                            {/* Slot label */}
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] text-center py-0.5 font-medium">
+                              {index === 0 ? 'Principal' : subcategoryValues[index] || `Slot ${index}`}
                             </div>
+                          </label>
+                          {/* Delete image button */}
+                          {imgUrl && !isUploading && (
+                            <button
+                              onClick={() => handleDeleteImage(editingProduct._id, index)}
+                              className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors z-10"
+                              title="Eliminar imagen"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
                           )}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleImageUpload(editingProduct._id, file, index);
-                              e.target.value = '';
-                            }}
-                            className="hidden"
-                            disabled={isUploading}
-                          />
-                          {/* Slot label */}
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] text-center py-0.5 font-medium">
-                            {index === 0 ? 'Principal' : subcategoryValues[index] || `Slot ${index}`}
-                          </div>
-                        </label>
+                        </div>
                         {fileSize && (
                           <span className={`${getFileSizeColor(fileSize).bg} text-white px-2 py-0.5 rounded-full text-[10px] font-semibold mt-1 shadow-sm`}>
                             {formatFileSize(fileSize)}
@@ -1289,6 +1443,65 @@ export function AdminPanel() {
                   Cancelar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === EDIT CATEGORY MODAL === */}
+      {editingCategory && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800">Editar Categoría</h2>
+              <button
+                onClick={() => setEditingCategory(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Nombre</label>
+                <input
+                  type="text"
+                  value={editCatName}
+                  onChange={(e) => {
+                    setEditCatName(e.target.value);
+                    autoSaveCategory(editingCategory, { name: e.target.value });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Emoji</label>
+                <input
+                  type="text"
+                  value={editCatEmoji}
+                  onChange={(e) => {
+                    setEditCatEmoji(e.target.value);
+                    autoSaveCategory(editingCategory, { emoji: e.target.value });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
+                  maxLength={4}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setEditingCategory(null)}
+                className="flex-1 px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-sm"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => handleDeleteCategory(editingCategory)}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-semibold text-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                Eliminar
+              </button>
             </div>
           </div>
         </div>

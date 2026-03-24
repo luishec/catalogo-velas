@@ -103,6 +103,66 @@ export const reorder = mutation({
   },
 });
 
+export const updateProduct = mutation({
+  args: {
+    token: v.string(),
+    productId: v.id("products"),
+    code: v.optional(v.string()),
+    name: v.optional(v.string()),
+    categoryId: v.optional(v.id("categories")),
+  },
+  handler: async (ctx, args) => {
+    await assertAdmin(ctx, args.token);
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("Product not found");
+
+    const updates: Record<string, any> = {};
+
+    if (args.code !== undefined && args.code !== product.code) {
+      const existing = await ctx.db
+        .query("products")
+        .withIndex("by_code", (q) => q.eq("code", args.code!))
+        .first();
+      if (existing) throw new Error("Product code already exists");
+      updates.code = args.code;
+    }
+    if (args.name !== undefined) updates.name = args.name;
+    if (args.categoryId !== undefined) updates.categoryId = args.categoryId;
+
+    if (Object.keys(updates).length > 0) {
+      await ctx.db.patch(args.productId, updates);
+    }
+  },
+});
+
+export const deleteProductImage = mutation({
+  args: {
+    token: v.string(),
+    productId: v.id("products"),
+    imageIndex: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await assertAdmin(ctx, args.token);
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("Product not found");
+
+    const storageIds = [...(product.imageStorageIds || [])];
+    const urls = [...(product.imageUrls || [])];
+
+    if (args.imageIndex < storageIds.length && storageIds[args.imageIndex]) {
+      await ctx.storage.delete(storageIds[args.imageIndex] as any);
+    }
+
+    if (args.imageIndex < storageIds.length) storageIds[args.imageIndex] = "";
+    if (args.imageIndex < urls.length) urls[args.imageIndex] = "";
+
+    await ctx.db.patch(args.productId, {
+      imageStorageIds: storageIds,
+      imageUrls: urls,
+    });
+  },
+});
+
 export const updateProductImage = mutation({
   args: {
     token: v.string(),
