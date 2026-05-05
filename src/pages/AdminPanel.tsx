@@ -70,87 +70,116 @@ function SortableListRow({
   };
 
   const mainImg = getImageUrl(product, 0);
-  const subcats = (product.subcategories ?? []).filter(Boolean);
   const isHidden = product.isVisible === false;
+
+  // Slots 1-6: cada uno emparejado con su subcategoría
+  const variants = [1, 2, 3, 4, 5, 6]
+    .map((i) => ({
+      index: i,
+      name: product.subcategories?.[i] ?? null,
+      img: getImageUrl(product, i),
+    }))
+    .filter((v) => v.name || v.img);
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-all px-3 py-2 ${
-        isHidden ? 'opacity-50 border border-dashed border-red-400' : ''
+      className={`bg-white rounded-xl shadow-sm hover:shadow-md transition-all overflow-hidden ${
+        isHidden ? 'opacity-50 border border-dashed border-red-400' : 'border border-gray-100'
       }`}
     >
-      {/* Order number */}
-      <span className="text-xs font-bold text-gray-400 w-6 text-center flex-shrink-0">
-        {index + 1}
-      </span>
+      {/* Fila principal: foto + nombre + acciones */}
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        {/* Número */}
+        <span className="text-xs font-bold text-gray-400 w-5 text-center flex-shrink-0">
+          {index + 1}
+        </span>
 
-      {/* Drag handle */}
-      {!disabled && (
-        <button
-          {...attributes}
-          {...listeners}
-          className="p-1 rounded text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0"
-        >
-          <GripVertical className="w-4 h-4" />
-        </button>
-      )}
-
-      {/* Thumbnail */}
-      <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50 border border-gray-200">
-        {mainImg ? (
-          <img src={mainImg} alt={product.name} className="w-full h-full object-contain p-1" loading="lazy" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <ImageIcon className="w-5 h-5 text-gray-300" />
-          </div>
+        {/* Handle de arrastre */}
+        {!disabled && (
+          <button
+            {...attributes}
+            {...listeners}
+            className="p-1 rounded text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0"
+          >
+            <GripVertical className="w-4 h-4" />
+          </button>
         )}
-      </div>
 
-      {/* Product info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="inline-block bg-gradient-to-r from-cyan-400 to-blue-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold">
-            {product.code}
-          </span>
-          {product.isBestseller && (
-            <Star className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="currentColor" />
-          )}
-          {isHidden && (
-            <EyeOff className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+        {/* Foto principal */}
+        <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50 border border-gray-200">
+          {mainImg ? (
+            <img src={mainImg} alt={product.name} className="w-full h-full object-contain p-1" loading="lazy" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <ImageIcon className="w-5 h-5 text-gray-300" />
+            </div>
           )}
         </div>
-        <p className="text-sm font-semibold text-gray-800 truncate">{product.name}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[11px] text-gray-500">
-            {getCategoryEmoji(product.categoryId)} {getCategoryName(product.categoryId)}
-          </span>
-          {subcats.length > 0 && (
-            <span className="text-[11px] text-gray-400">
-              · {subcats.join(', ')}
+
+        {/* Nombre + código + categoría */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="inline-block bg-gradient-to-r from-cyan-400 to-blue-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold">
+              {product.code}
             </span>
-          )}
+            {product.isBestseller && (
+              <Star className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="currentColor" />
+            )}
+            {isHidden && (
+              <EyeOff className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+            )}
+          </div>
+          <p className="text-sm font-semibold text-gray-800 truncate">{product.name}</p>
+          <span className="text-[11px] text-gray-400">
+            {getCategoryName(product.categoryId)}
+          </span>
+        </div>
+
+        {/* Acciones */}
+        <div className="flex gap-1.5 flex-shrink-0">
+          <button
+            onClick={() => onEdit(product)}
+            className="p-2 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 transition-colors"
+            title="Editar"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => onDelete(product)}
+            className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+            title="Eliminar"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-1.5 flex-shrink-0">
-        <button
-          onClick={() => onEdit(product)}
-          className="p-2 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 transition-colors"
-          title="Editar"
-        >
-          <Pencil className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => onDelete(product)}
-          className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-          title="Eliminar"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
+      {/* Variantes: subcategoría + imagen correspondiente */}
+      {variants.length > 0 && (
+        <div className="px-3 pb-3 flex gap-2 flex-wrap border-t border-gray-50 pt-2">
+          {variants.map((v) => (
+            <div
+              key={v.index}
+              className="flex items-center gap-1.5 bg-gray-50 border border-gray-100 rounded-lg px-2 py-1.5"
+            >
+              <div className="w-9 h-9 flex-shrink-0 rounded-md overflow-hidden bg-white border border-gray-200">
+                {v.img ? (
+                  <img src={v.img} alt={v.name ?? ''} className="w-full h-full object-contain p-0.5" loading="lazy" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <ImageIcon className="w-3 h-3 text-gray-300" />
+                  </div>
+                )}
+              </div>
+              {v.name && (
+                <span className="text-xs text-gray-600 font-medium">{v.name}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -264,7 +293,6 @@ function SortableProductCard({
           {product.name}
         </h3>
         <p className="text-xs text-gray-500 mb-2">
-          {getCategoryEmoji(product.categoryId)}{' '}
           {getCategoryName(product.categoryId)}
         </p>
 
@@ -358,7 +386,7 @@ export function AdminPanel() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
 
   // Add category modal
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
@@ -386,6 +414,68 @@ export function AdminPanel() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
+
+  // Debounce refs (deben estar antes del early return)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const productDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const catDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  const showMessage = useCallback((type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 3000);
+  }, []);
+
+  const autoSaveSubcategories = useCallback((values: string[]) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      if (!token || !editingProduct) return;
+      try {
+        await updateSubcategoriesMut({
+          token,
+          productId: editingProduct._id,
+          subcategories: values,
+        });
+      } catch (error) {
+        console.error('Error updating subcategories:', error);
+        showMessage('error', 'Error al actualizar las subcategorías');
+      }
+    }, 500);
+  }, [token, editingProduct, updateSubcategoriesMut, showMessage]);
+
+  const autoSaveProduct = useCallback((fields: { name?: string; code?: string; categoryId?: string }) => {
+    if (productDebounceRef.current) clearTimeout(productDebounceRef.current);
+    productDebounceRef.current = setTimeout(async () => {
+      if (!token || !editingProduct) return;
+      try {
+        await updateProductMut({
+          token,
+          productId: editingProduct._id,
+          ...(fields.name !== undefined ? { name: fields.name } : {}),
+          ...(fields.code !== undefined ? { code: fields.code } : {}),
+          ...(fields.categoryId !== undefined ? { categoryId: fields.categoryId as any } : {}),
+        });
+      } catch (error: any) {
+        showMessage('error', error.message || 'Error al actualizar producto');
+      }
+    }, 500);
+  }, [token, editingProduct, updateProductMut, showMessage]);
+
+  const autoSaveCategory = useCallback((cat: Category, fields: { name?: string; emoji?: string }) => {
+    if (catDebounceRef.current) clearTimeout(catDebounceRef.current);
+    catDebounceRef.current = setTimeout(async () => {
+      if (!token) return;
+      try {
+        await updateCategoryMut({
+          token,
+          categoryId: cat._id,
+          ...(fields.name !== undefined ? { name: fields.name } : {}),
+          ...(fields.emoji !== undefined ? { emoji: fields.emoji } : {}),
+        });
+      } catch (error: any) {
+        showMessage('error', error.message || 'Error al actualizar categoría');
+      }
+    }, 500);
+  }, [token, updateCategoryMut, showMessage]);
 
   // Auth guard
   useEffect(() => {
@@ -430,11 +520,6 @@ export function AdminPanel() {
   });
 
   // === Handlers ===
-  const showMessage = (type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
-  };
-
   const sanitizeInput = (input: string): string => {
     return input.trim().replace(/<[^>]*>/g, '');
   };
@@ -539,25 +624,6 @@ export function AdminPanel() {
     }
   };
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-
-  const autoSaveSubcategories = useCallback((values: string[]) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      if (!token || !editingProduct) return;
-      try {
-        await updateSubcategoriesMut({
-          token,
-          productId: editingProduct._id,
-          subcategories: values,
-        });
-      } catch (error) {
-        console.error('Error updating subcategories:', error);
-        showMessage('error', 'Error al actualizar las subcategorías');
-      }
-    }, 500);
-  }, [token, editingProduct, updateSubcategoriesMut, showMessage]);
-
   const openEditModal = (product: Product) => {
     setEditingProduct(product);
     setEditName(product.name);
@@ -570,55 +636,16 @@ export function AdminPanel() {
     ]);
   };
 
-  const productDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-
-  const autoSaveProduct = useCallback((fields: { name?: string; code?: string; categoryId?: string }) => {
-    if (productDebounceRef.current) clearTimeout(productDebounceRef.current);
-    productDebounceRef.current = setTimeout(async () => {
-      if (!token || !editingProduct) return;
-      try {
-        await updateProductMut({
-          token,
-          productId: editingProduct._id,
-          ...(fields.name !== undefined ? { name: fields.name } : {}),
-          ...(fields.code !== undefined ? { code: fields.code } : {}),
-          ...(fields.categoryId !== undefined ? { categoryId: fields.categoryId as any } : {}),
-        });
-      } catch (error: any) {
-        showMessage('error', error.message || 'Error al actualizar producto');
-      }
-    }, 500);
-  }, [token, editingProduct, updateProductMut, showMessage]);
-
-  const handleDeleteImage = async (productId: string, imageIndex: number) => {
+  const handleDeleteImage = async (productId: string, imageIndex: number, silent = false) => {
     if (!token) return;
     try {
       await deleteProductImageMut({ token, productId: productId as any, imageIndex });
-      showMessage('success', 'Imagen eliminada');
+      if (!silent) showMessage('success', 'Imagen eliminada');
     } catch (error) {
       console.error('Error deleting image:', error);
-      showMessage('error', 'Error al eliminar la imagen');
+      if (!silent) showMessage('error', 'Error al eliminar la imagen');
     }
   };
-
-  const catDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-
-  const autoSaveCategory = useCallback((cat: Category, fields: { name?: string; emoji?: string }) => {
-    if (catDebounceRef.current) clearTimeout(catDebounceRef.current);
-    catDebounceRef.current = setTimeout(async () => {
-      if (!token) return;
-      try {
-        await updateCategoryMut({
-          token,
-          categoryId: cat._id,
-          ...(fields.name !== undefined ? { name: fields.name } : {}),
-          ...(fields.emoji !== undefined ? { emoji: fields.emoji } : {}),
-        });
-      } catch (error: any) {
-        showMessage('error', error.message || 'Error al actualizar categoría');
-      }
-    }, 500);
-  }, [token, updateCategoryMut, showMessage]);
 
   const handleDeleteCategory = async (cat: Category) => {
     if (!token) return;
@@ -825,7 +852,6 @@ export function AdminPanel() {
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    <span>{cat.emoji || '🎂'}</span>
                     <span>{cat.name}</span>
                     <span
                       className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
@@ -935,7 +961,6 @@ export function AdminPanel() {
                   {selectedCategory === null && (
                     <div className="mb-3 sm:mb-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-xl px-4 py-2.5 sm:px-5 sm:py-3 shadow-md flex items-center justify-center gap-3">
                       <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-                        <span>{category.emoji || '🎂'}</span>
                         {category.name}
                       </h2>
                       <span className="bg-white/25 text-white text-sm font-bold px-3 py-1 rounded-full">
@@ -1103,149 +1128,148 @@ export function AdminPanel() {
                       <option value="">Sin categoría</option>
                       {categories.map((cat) => (
                         <option key={cat._id} value={cat._id}>
-                          {cat.emoji || '🎂'} {cat.name}
+                          {cat.name}
                         </option>
                       ))}
                     </select>
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Nombre</label>
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => {
-                        setEditName(e.target.value);
-                        autoSaveProduct({ name: e.target.value });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
-                    />
-                  </div>
                 </div>
               </div>
 
-              {/* Images section */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4" />
-                  Imágenes del Producto
-                </h3>
-                <div className="grid grid-cols-4 sm:grid-cols-4 gap-2 sm:gap-3">
-                  {[0, 1, 2, 3, 4, 5, 6].map((index) => {
-                    const imgUrl = getImageUrl(editingProduct, index);
-                    const isUploading = uploading === `${editingProduct._id}-${index}`;
-                    const storageId = editingProduct.imageStorageIds?.[index];
-                    const fileSize = storageId && imageSizesGlobal?.[storageId];
-                    return (
-                      <div key={index} className="flex flex-col items-center">
-                        <div className="relative aspect-square w-full rounded-xl overflow-hidden">
-                          <label
-                            className={`block w-full h-full cursor-pointer group/slot transition-all ${
-                              imgUrl
-                                ? 'border-2 border-cyan-200 hover:border-cyan-400 rounded-xl overflow-hidden'
-                                : 'border-2 border-dashed border-gray-300 hover:border-cyan-400 bg-gray-50 rounded-xl overflow-hidden'
-                            }`}
-                          >
-                            {isUploading ? (
-                              <div className="absolute inset-0 flex items-center justify-center bg-white/80">
-                                <div className="animate-spin rounded-full h-6 w-6 border-3 border-cyan-400 border-t-transparent"></div>
-                              </div>
-                            ) : imgUrl ? (
-                              <>
-                                <img
-                                  src={imgUrl}
-                                  alt={`Imagen ${index + 1}`}
-                                  className="w-full h-full object-contain p-1"
-                                />
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center justify-center">
-                                  <RefreshCw className="w-5 h-5 text-white" />
-                                </div>
-                              </>
-                            ) : (
-                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                                <Upload className="w-5 h-5 mb-1" />
-                                <span className="text-[10px]">Subir</span>
-                              </div>
-                            )}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleImageUpload(editingProduct._id, file, index);
-                                e.target.value = '';
-                              }}
-                              className="hidden"
-                              disabled={isUploading}
-                            />
-                            {/* Slot label */}
-                            <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] text-center py-0.5 font-medium">
-                              {index === 0 ? 'Principal' : subcategoryValues[index] || `Slot ${index}`}
+              {/* Lista unificada: foto + nombre por fila */}
+              <div className="space-y-2">
+                {[0, 1, 2, 3, 4, 5, 6].map((index) => {
+                  const imgUrl = getImageUrl(editingProduct, index);
+                  const isUploading = uploading === `${editingProduct._id}-${index}`;
+                  const storageId = editingProduct.imageStorageIds?.[index];
+                  const fileSize = storageId && imageSizesGlobal?.[storageId];
+                  const isMain = index === 0;
+
+                  return (
+                    <div key={index} className="flex items-center gap-3 bg-gray-50 rounded-xl p-2">
+                      {/* Foto — clic para subir/reemplazar */}
+                      <div className="relative w-16 h-16 flex-shrink-0">
+                        <label
+                          className={`block w-full h-full cursor-pointer rounded-xl overflow-hidden transition-all ${
+                            imgUrl
+                              ? 'border-2 border-cyan-200 hover:border-cyan-400'
+                              : 'border-2 border-dashed border-gray-300 hover:border-cyan-400 bg-white'
+                          }`}
+                        >
+                          {isUploading ? (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-xl">
+                              <div className="animate-spin rounded-full h-5 w-5 border-2 border-cyan-400 border-t-transparent" />
                             </div>
-                          </label>
-                          {/* Delete image button */}
-                          {imgUrl && !isUploading && (
-                            <button
-                              onClick={() => handleDeleteImage(editingProduct._id, index)}
-                              className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors z-10"
-                              title="Eliminar imagen"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
+                          ) : imgUrl ? (
+                            <>
+                              <img src={imgUrl} alt="" className="w-full h-full object-contain p-1" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
+                                <RefreshCw className="w-4 h-4 text-white" />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                              <Upload className="w-4 h-4 mb-0.5" />
+                              <span className="text-[9px]">Subir</span>
+                            </div>
                           )}
-                        </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleImageUpload(editingProduct._id, file, index);
+                              e.target.value = '';
+                            }}
+                            className="hidden"
+                            disabled={isUploading}
+                          />
+                        </label>
+                        {/* Borrar imagen */}
+                        {imgUrl && !isUploading && (
+                          <button
+                            onClick={() => handleDeleteImage(editingProduct._id, index)}
+                            className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors z-10"
+                            title="Eliminar imagen"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                        {/* Tamaño del archivo */}
                         {fileSize && (
-                          <span className={`${getFileSizeColor(fileSize).bg} text-white px-2 py-0.5 rounded-full text-[10px] font-semibold mt-1 shadow-sm`}>
+                          <div className={`absolute -bottom-2 left-1/2 -translate-x-1/2 ${getFileSizeColor(fileSize).bg} text-white px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap`}>
                             {formatFileSize(fileSize)}
-                          </span>
+                          </div>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
 
-              {/* Subcategories section */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  🎨 Subcategorías (variantes)
-                </h3>
-                <div className="space-y-2">
-                  {[0, 1, 2, 3, 4, 5, 6].map((index) => {
-                    const imgUrl = getImageUrl(editingProduct, index);
-                    return (
-                      <div key={index} className="flex items-center gap-2 sm:gap-3">
-                        {/* Mini thumbnail */}
-                        <div className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-                          {imgUrl ? (
-                            <img src={imgUrl} alt="" className="w-full h-full object-contain" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <ImageIcon className="w-4 h-4 text-gray-300" />
-                            </div>
-                          )}
-                        </div>
-                        {/* Input */}
-                        <input
-                          type="text"
-                          value={subcategoryValues[index]}
-                          onChange={(e) => {
-                            const newValues = [...subcategoryValues];
-                            newValues[index] = e.target.value;
-                            setSubcategoryValues(newValues);
-                            autoSaveSubcategories(newValues);
-                          }}
-                          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
-                          placeholder={`Subcategoría ${index}`}
-                        />
+                      {/* Nombre editable */}
+                      <div className="flex-1 min-w-0">
+                        {isMain ? (
+                          <input
+                            type="text"
+                            value={editName}
+                            onChange={(e) => {
+                              setEditName(e.target.value);
+                              autoSaveProduct({ name: e.target.value });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm font-semibold bg-white"
+                            placeholder="Nombre del producto"
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={subcategoryValues[index]}
+                              onChange={(e) => {
+                                const newValues = [...subcategoryValues];
+                                newValues[index] = e.target.value;
+                                setSubcategoryValues(newValues);
+                                autoSaveSubcategories(newValues);
+                              }}
+                              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm bg-white"
+                              placeholder={`Variante ${index}`}
+                            />
+                            {(subcategoryValues[index] || imgUrl) && (
+                              <button
+                                onClick={() => {
+                                  // Limpiar nombre siempre
+                                  const newValues = [...subcategoryValues];
+                                  newValues[index] = '';
+                                  setSubcategoryValues(newValues);
+                                  autoSaveSubcategories(newValues);
+                                  // Eliminar imagen en paralelo si existe (silencioso si falla)
+                                  if (imgUrl) {
+                                    handleDeleteImage(editingProduct._id, index, true);
+                                  }
+                                }}
+                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                                title="Eliminar variante"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             {/* Modal footer */}
             <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 sm:px-6 py-4 flex gap-3 rounded-b-2xl">
+              <button
+                onClick={() => {
+                  setDeletingProduct(editingProduct);
+                  setEditingProduct(null);
+                }}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-semibold text-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                Eliminar producto
+              </button>
               <button
                 onClick={() => setEditingProduct(null)}
                 className="flex-1 px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-sm"

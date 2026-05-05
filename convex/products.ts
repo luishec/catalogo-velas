@@ -150,7 +150,11 @@ export const deleteProductImage = mutation({
     const urls = [...(product.imageUrls || [])];
 
     if (args.imageIndex < storageIds.length && storageIds[args.imageIndex]) {
-      await ctx.storage.delete(storageIds[args.imageIndex] as any);
+      try {
+        await ctx.storage.delete(storageIds[args.imageIndex] as any);
+      } catch {
+        // El objeto puede no existir en storage; continuamos a limpiar la BD
+      }
     }
 
     if (args.imageIndex < storageIds.length) storageIds[args.imageIndex] = "";

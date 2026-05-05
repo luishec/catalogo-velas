@@ -21,7 +21,7 @@ const TOKEN_KEY = 'admin_token';
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
 
-  const sessionData = useQuery(api.auth.validateSession, { token: token ?? undefined });
+  const sessionData = useQuery(api.auth.validateSession, token ? { token } : "skip");
   const loginMutation = useMutation(api.auth.login);
   const logoutMutation = useMutation(api.auth.logout);
 

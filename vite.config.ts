@@ -10,6 +10,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         globPatterns: [],
+        navigateFallback: 'index.html',
         runtimeCaching: [
           {
             urlPattern: /\.convex\.cloud\/api\/storage\/.*/,
