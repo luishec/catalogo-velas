@@ -5,7 +5,7 @@ import { api } from '../../convex/_generated/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LogOut, Upload, Save, X, Image as ImageIcon, Plus,
-  Trash2, Search, Star, Pencil, Eye, EyeOff, GripVertical, RefreshCw, LayoutGrid, List
+  Trash2, Search, Star, Pencil, Eye, EyeOff, GripVertical, RefreshCw, LayoutGrid, List, Settings
 } from 'lucide-react';
 import type { Product, Category } from '../types';
 import { Id } from '../../convex/_generated/dataModel';
@@ -331,6 +331,69 @@ function SortableProductCard({
   );
 }
 
+interface SortableCategoryRowProps {
+  category: Category;
+  productCount: number;
+  onChangeName: (cat: Category, name: string) => void;
+  onChangeEmoji: (cat: Category, emoji: string) => void;
+  onDelete: (cat: Category) => void;
+}
+
+function SortableCategoryRow({
+  category, productCount, onChangeName, onChangeEmoji, onDelete,
+}: SortableCategoryRowProps) {
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id: category._id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 bg-gray-50 rounded-xl p-2 border border-gray-200"
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="p-2 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing touch-none"
+        title="Arrastrar para reordenar"
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+      <input
+        type="text"
+        value={category.emoji || ''}
+        onChange={(e) => onChangeEmoji(category, e.target.value)}
+        maxLength={4}
+        className="w-12 px-2 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm text-center bg-white"
+        placeholder="🎂"
+      />
+      <input
+        type="text"
+        value={category.name}
+        onChange={(e) => onChangeName(category, e.target.value)}
+        className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm bg-white font-semibold"
+      />
+      <span className="text-xs text-gray-500 px-2 whitespace-nowrap">
+        {productCount}
+      </span>
+      <button
+        onClick={() => onDelete(category)}
+        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+        title="Eliminar categoría"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
 export function AdminPanel() {
   const { user, signOut, token, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -350,6 +413,7 @@ export function AdminPanel() {
   const addCategoryMut = useMutation(api.categories.add);
   const updateCategoryMut = useMutation(api.categories.update);
   const removeCategoryMut = useMutation(api.categories.remove);
+  const reorderCategoriesMut = useMutation(api.categories.reorder);
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
 
   const products = (productsData as Product[] | undefined) ?? [];
@@ -392,6 +456,9 @@ export function AdminPanel() {
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [newCategory, setNewCategory] = useState({ name: '', emoji: '', priority: 0 });
 
+  // Manage categories modal
+  const [showManageCategoriesModal, setShowManageCategoriesModal] = useState(false);
+
   // Add product form
   const [newProduct, setNewProduct] = useState({ code: '', name: '', category_id: '' });
   const [formErrors, setFormErrors] = useState<{ code?: string; name?: string; category_id?: string }>({});
@@ -404,10 +471,6 @@ export function AdminPanel() {
   const [editCode, setEditCode] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
 
-  // Category editing
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [editCatName, setEditCatName] = useState('');
-  const [editCatEmoji, setEditCatEmoji] = useState('');
 
   // DnD sensors
   const sensors = useSensors(
@@ -656,7 +719,6 @@ export function AdminPanel() {
     }
     try {
       await removeCategoryMut({ token, name: cat.name });
-      setEditingCategory(null);
       showMessage('success', 'Categoría eliminada');
     } catch (error) {
       console.error('Error deleting category:', error);
@@ -754,6 +816,22 @@ export function AdminPanel() {
 
   const handleDragCancel = () => {
     setActiveId(null);
+  };
+
+  const handleCategoryDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !token) return;
+    const oldIndex = categories.findIndex((c) => c._id === active.id);
+    const newIndex = categories.findIndex((c) => c._id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(categories, oldIndex, newIndex);
+    const updates = reordered.map((c, i) => ({ categoryId: c._id, priority: i + 1 }));
+    try {
+      await reorderCategoriesMut({ token, updates });
+    } catch (error: any) {
+      console.error('Error reordering categories:', error);
+      showMessage('error', error.message || 'Error al reordenar categorías');
+    }
   };
 
   const activeProduct = activeId ? filteredProducts.find((p) => p._id === activeId) : null;
@@ -892,17 +970,11 @@ export function AdminPanel() {
                 </button>
               </div>
               <button
-                onClick={() => {
-                  const nextPriority = categories.length > 0
-                    ? Math.max(...categories.map((c) => c.priority)) + 1
-                    : 1;
-                  setNewCategory({ name: '', emoji: '', priority: nextPriority });
-                  setShowAddCategoryModal(true);
-                }}
+                onClick={() => setShowManageCategoriesModal(true)}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-semibold text-sm"
               >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Agregar Categoría</span>
+                <Settings className="w-4 h-4" />
+                <span className="hidden sm:inline">Categorías</span>
               </button>
               <button
                 onClick={() => setShowAddModal(true)}
@@ -967,15 +1039,11 @@ export function AdminPanel() {
                         {catProducts.length}
                       </span>
                       <button
-                        onClick={() => {
-                          setEditingCategory(category);
-                          setEditCatName(category.name);
-                          setEditCatEmoji(category.emoji || '');
-                        }}
+                        onClick={() => setShowManageCategoriesModal(true)}
                         className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-                        title="Editar categoría"
+                        title="Gestionar categorías"
                       >
-                        <Pencil className="w-4 h-4 text-white" />
+                        <Settings className="w-4 h-4 text-white" />
                       </button>
                     </div>
                   )}
@@ -1472,59 +1540,74 @@ export function AdminPanel() {
         </div>
       )}
 
-      {/* === EDIT CATEGORY MODAL === */}
-      {editingCategory && (
+      {/* === MANAGE CATEGORIES MODAL === */}
+      {showManageCategoriesModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-800">Editar Categoría</h2>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-800">Gestionar Categorías</h2>
               <button
-                onClick={() => setEditingCategory(null)}
+                onClick={() => setShowManageCategoriesModal(false)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Nombre</label>
-                <input
-                  type="text"
-                  value={editCatName}
-                  onChange={(e) => {
-                    setEditCatName(e.target.value);
-                    autoSaveCategory(editingCategory, { name: e.target.value });
-                  }}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Emoji</label>
-                <input
-                  type="text"
-                  value={editCatEmoji}
-                  onChange={(e) => {
-                    setEditCatEmoji(e.target.value);
-                    autoSaveCategory(editingCategory, { emoji: e.target.value });
-                  }}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
-                  maxLength={4}
-                />
-              </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <p className="text-xs text-gray-500 mb-3">
+                Arrastra <GripVertical className="inline w-3 h-3" /> para cambiar el orden. Los cambios de nombre y emoji se guardan automáticamente.
+              </p>
+              {categories.length === 0 ? (
+                <div className="text-center py-10 text-gray-400 text-sm">
+                  No hay categorías todavía
+                </div>
+              ) : (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleCategoryDragEnd}
+                >
+                  <SortableContext
+                    items={categories.map((c) => c._id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="space-y-2">
+                      {categories.map((category) => (
+                        <SortableCategoryRow
+                          key={category._id}
+                          category={category}
+                          productCount={products.filter((p) => p.categoryId === category._id).length}
+                          onChangeName={(cat, name) => autoSaveCategory(cat, { name })}
+                          onChangeEmoji={(cat, emoji) => autoSaveCategory(cat, { emoji })}
+                          onDelete={handleDeleteCategory}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              )}
             </div>
-            <div className="flex gap-3 mt-6">
+
+            <div className="px-5 py-4 border-t border-gray-200 flex gap-3">
               <button
-                onClick={() => setEditingCategory(null)}
-                className="flex-1 px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-sm"
+                onClick={() => {
+                  const nextPriority = categories.length > 0
+                    ? Math.max(...categories.map((c) => c.priority)) + 1
+                    : 1;
+                  setNewCategory({ name: '', emoji: '', priority: nextPriority });
+                  setShowAddCategoryModal(true);
+                }}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-semibold text-sm flex-1"
               >
-                Cerrar
+                <Plus className="w-4 h-4" />
+                Agregar nueva
               </button>
               <button
-                onClick={() => handleDeleteCategory(editingCategory)}
-                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-semibold text-sm"
+                onClick={() => setShowManageCategoriesModal(false)}
+                className="px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-sm"
               >
-                <Trash2 className="w-4 h-4" />
-                Eliminar
+                Cerrar
               </button>
             </div>
           </div>

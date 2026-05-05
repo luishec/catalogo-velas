@@ -63,6 +63,19 @@ export const update = mutation({
   },
 });
 
+export const reorder = mutation({
+  args: {
+    token: v.string(),
+    updates: v.array(v.object({ categoryId: v.id("categories"), priority: v.number() })),
+  },
+  handler: async (ctx, args) => {
+    await assertAdmin(ctx, args.token);
+    for (const { categoryId, priority } of args.updates) {
+      await ctx.db.patch(categoryId, { priority });
+    }
+  },
+});
+
 export const remove = mutation({
   args: { token: v.string(), name: v.string() },
   handler: async (ctx, args) => {
