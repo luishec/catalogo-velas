@@ -52,12 +52,13 @@ interface SortableListRowProps {
   getImageUrl: (p: Product, i: number) => string | null;
   getCategoryName: (id?: Id<'categories'>) => string;
   getCategoryEmoji: (id?: Id<'categories'>) => string;
+  onToggleVisibility: (id: Id<'products'>, e: React.MouseEvent) => void;
   onEdit: (p: Product) => void;
   onDelete: (p: Product) => void;
 }
 
 function SortableListRow({
-  product, index, disabled, getImageUrl, getCategoryName, getCategoryEmoji, onEdit, onDelete,
+  product, index, disabled, getImageUrl, getCategoryName, getCategoryEmoji, onToggleVisibility, onEdit, onDelete,
 }: SortableListRowProps) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -139,6 +140,17 @@ function SortableListRow({
 
         {/* Acciones */}
         <div className="flex gap-1.5 flex-shrink-0">
+          <button
+            onClick={(e) => onToggleVisibility(product._id, e)}
+            className={`p-2 rounded-lg transition-colors ${
+              isHidden
+                ? 'bg-red-500 text-white hover:bg-red-600'
+                : 'bg-green-50 text-green-600 hover:bg-green-100'
+            }`}
+            title={isHidden ? 'Mostrar en catálogo' : 'Ocultar del catálogo'}
+          >
+            {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
           <button
             onClick={() => onEdit(product)}
             className="p-2 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 transition-colors"
@@ -1091,6 +1103,7 @@ export function AdminPanel() {
                               getImageUrl={getImageUrl}
                               getCategoryName={getCategoryName}
                               getCategoryEmoji={getCategoryEmoji}
+                              onToggleVisibility={handleToggleVisibility}
                               onEdit={openEditModal}
                               onDelete={setDeletingProduct}
                             />
