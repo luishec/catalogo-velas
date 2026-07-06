@@ -10,10 +10,6 @@ import {
 import { Id } from "./_generated/dataModel";
 import { assertAdmin } from "./auth";
 
-// El logo del encabezado vive en storage pero se referencia por URL fija
-// en CatalogHeader.tsx — nunca debe tratarse como huérfano
-const LOGO_STORAGE_UUID = "2699258e-274d-42a7-b958-7bdc2e6b4847";
-
 async function findOrphanFiles(ctx: QueryCtx | MutationCtx) {
   const products = await ctx.db.query("products").collect();
   const referencedIds = new Set<string>();
@@ -35,7 +31,7 @@ async function findOrphanFiles(ctx: QueryCtx | MutationCtx) {
   for (const file of files) {
     if (referencedIds.has(file._id)) continue;
     const url = await ctx.storage.getUrl(file._id);
-    if (url && (referencedUrls.has(url) || url.includes(LOGO_STORAGE_UUID))) continue;
+    if (url && referencedUrls.has(url)) continue;
     orphans.push({
       storageId: file._id,
       url,
@@ -84,8 +80,9 @@ export const deleteOrphans = internalMutation({
 });
 
 export const getImageSizes = query({
-  args: { storageIds: v.array(v.string()) },
+  args: { token: v.string(), storageIds: v.array(v.string()) },
   handler: async (ctx, args) => {
+    await assertAdmin(ctx, args.token);
     const sizes: Record<string, number> = {};
     for (const id of args.storageIds) {
       if (!id) continue;

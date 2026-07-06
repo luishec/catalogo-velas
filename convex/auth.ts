@@ -27,6 +27,13 @@ export const login = mutation({
     const isValid = await verifyPassword(args.password, admin.passwordHash);
     if (!isValid) throw new Error("Invalid credentials");
 
+    // Re-hash transparente: migra hashes legados (SHA-256) a PBKDF2
+    if (!admin.passwordHash.startsWith("pbkdf2:")) {
+      await ctx.db.patch(admin._id, {
+        passwordHash: await hashPassword(args.password),
+      });
+    }
+
     // Aprovechar el login para purgar sesiones expiradas
     const now = Date.now();
     const allSessions = await ctx.db.query("sessions").collect();
@@ -83,28 +90,78 @@ export async function assertAdmin(ctx: QueryCtx | MutationCtx, token: string) {
   }
 }
 
+// Iteraciones PBKDF2-SHA256. Debe completarse holgadamente dentro del
+// límite de ejecución de mutaciones de Convex (~1s)
+const PBKDF2_ITERATIONS = 310000;
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function hexToBytes(hex: string) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
 function generateToken(): string {
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
-  return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
+  return bytesToHex(array);
 }
 
+async function pbkdf2Hex(
+  password: string,
+  saltHex: string,
+  iterations: number
+): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt: hexToBytes(saltHex), iterations },
+    key,
+    256
+  );
+  return bytesToHex(new Uint8Array(bits));
+}
+
+// Formato almacenado: pbkdf2:<iteraciones>:<saltHex>:<hashHex>
 async function hashPassword(password: string): Promise<string> {
-  const salt = generateToken().slice(0, 32);
-  const encoder = new TextEncoder();
-  const data = encoder.encode(salt + password);
+  const saltHex = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
+  const hash = await pbkdf2Hex(password, saltHex, PBKDF2_ITERATIONS);
+  return `pbkdf2:${PBKDF2_ITERATIONS}:${saltHex}:${hash}`;
+}
+
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  return salt + ":" + hashHex;
+  return bytesToHex(new Uint8Array(hashBuffer));
 }
 
 async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
-  const [salt, hash] = storedHash.split(":");
-  const encoder = new TextEncoder();
-  const data = encoder.encode(salt + password);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  return hashHex === hash;
+  const parts = storedHash.split(":");
+  if (parts[0] === "pbkdf2" && parts.length === 4) {
+    const computed = await pbkdf2Hex(password, parts[2], parseInt(parts[1], 10));
+    return timingSafeEqualHex(computed, parts[3]);
+  }
+  // Formato legado: <salt>:<sha256(salt + password)>
+  const [salt, hash] = parts;
+  const computed = await sha256Hex(salt + password);
+  return timingSafeEqualHex(computed, hash);
 }

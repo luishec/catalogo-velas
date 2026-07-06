@@ -55,7 +55,7 @@ export function CatalogHeader({ categories = [], onSelectCategory }: CatalogHead
           </button>
 
           <img
-            src="https://vivid-panda-934.convex.cloud/api/storage/2699258e-274d-42a7-b958-7bdc2e6b4847"
+            src="/logo.webp"
             alt="Magic Party"
             loading="eager"
             onClick={handleLogoClick}

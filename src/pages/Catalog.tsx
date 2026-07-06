@@ -13,16 +13,13 @@ export function Catalog() {
   const categories = useMemo(() => (categoriesData as Category[] | undefined) ?? [], [categoriesData]);
   const loading = productsData === undefined || categoriesData === undefined;
 
-  const visibleProducts = useMemo(() => {
-    return products.filter(p => p.isVisible !== false);
-  }, [products]);
-
+  // El backend (products.list) ya devuelve solo productos visibles
   const productsByCategory = useMemo(() => {
     return categories.map((category) => ({
       category,
-      products: visibleProducts.filter(p => p.categoryId === category._id),
+      products: products.filter(p => p.categoryId === category._id),
     })).filter(group => group.products.length > 0);
-  }, [categories, visibleProducts]);
+  }, [categories, products]);
 
   const handleScrollToCategory = useCallback((categoryId: string) => {
     const el = document.getElementById(`category-${categoryId}`);

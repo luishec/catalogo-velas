@@ -4,8 +4,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  LogOut, Upload, X, Image as ImageIcon, Plus,
-  Trash2, Search, Star, Pencil, Eye, EyeOff, GripVertical, RefreshCw, LayoutGrid, List, Settings
+  LogOut, Image as ImageIcon, Plus, Search, Eye, LayoutGrid, List, Settings,
 } from 'lucide-react';
 import type { Product, Category } from '../types';
 import { Id } from '../../convex/_generated/dataModel';
@@ -24,382 +23,16 @@ import {
   SortableContext,
   rectSortingStrategy,
   verticalListSortingStrategy,
-  useSortable,
   arrayMove,
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-
-interface SortableProductCardProps {
-  product: Product;
-  disabled: boolean;
-  getImageCount: (p: Product) => number;
-  getImageUrl: (p: Product, i: number) => string | null;
-  getCategoryName: (id?: Id<'categories'>) => string;
-  onToggleBestseller: (id: Id<'products'>, e: React.MouseEvent) => void;
-  onToggleVisibility: (id: Id<'products'>, e: React.MouseEvent) => void;
-  onEdit: (p: Product) => void;
-  onDelete: (p: Product) => void;
-}
-
-interface SortableListRowProps {
-  product: Product;
-  index: number;
-  disabled: boolean;
-  getImageUrl: (p: Product, i: number) => string | null;
-  getCategoryName: (id?: Id<'categories'>) => string;
-  onToggleVisibility: (id: Id<'products'>, e: React.MouseEvent) => void;
-  onEdit: (p: Product) => void;
-  onDelete: (p: Product) => void;
-}
-
-function SortableListRow({
-  product, index, disabled, getImageUrl, getCategoryName, onToggleVisibility, onEdit, onDelete,
-}: SortableListRowProps) {
-  const {
-    attributes, listeners, setNodeRef, transform, transition, isDragging,
-  } = useSortable({ id: product._id, disabled });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : undefined,
-  };
-
-  const mainImg = getImageUrl(product, 0);
-  const isHidden = product.isVisible === false;
-
-  // Slots 1-6: cada uno emparejado con su subcategoría
-  const variants = [1, 2, 3, 4, 5, 6]
-    .map((i) => ({
-      index: i,
-      name: product.subcategories?.[i] ?? null,
-      img: getImageUrl(product, i),
-    }))
-    .filter((v) => v.name || v.img);
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`bg-white rounded-xl shadow-sm hover:shadow-md transition-all overflow-hidden ${
-        isHidden ? 'opacity-50 border border-dashed border-red-400' : 'border border-gray-100'
-      }`}
-    >
-      {/* Fila principal: foto + nombre + acciones */}
-      <div className="flex items-center gap-3 px-3 py-2.5">
-        {/* Número */}
-        <span className="text-xs font-bold text-gray-400 w-5 text-center flex-shrink-0">
-          {index + 1}
-        </span>
-
-        {/* Handle de arrastre */}
-        {!disabled && (
-          <button
-            {...attributes}
-            {...listeners}
-            className="p-1 rounded text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0"
-          >
-            <GripVertical className="w-4 h-4" />
-          </button>
-        )}
-
-        {/* Foto principal */}
-        <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-50 border border-gray-200">
-          {mainImg ? (
-            <img src={mainImg} alt={product.name} className="w-full h-full object-contain p-1" loading="lazy" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <ImageIcon className="w-5 h-5 text-gray-300" />
-            </div>
-          )}
-        </div>
-
-        {/* Nombre + código + categoría */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="inline-block bg-gradient-to-r from-cyan-400 to-blue-500 text-white px-1.5 py-0.5 rounded text-[10px] font-bold">
-              {product.code}
-            </span>
-            {product.isBestseller && (
-              <Star className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="currentColor" />
-            )}
-            {isHidden && (
-              <EyeOff className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-            )}
-          </div>
-          <p className="text-sm font-semibold text-gray-800 truncate">{product.name}</p>
-          <span className="text-[11px] text-gray-400">
-            {getCategoryName(product.categoryId)}
-          </span>
-        </div>
-
-        {/* Acciones */}
-        <div className="flex gap-1.5 flex-shrink-0">
-          <button
-            onClick={(e) => onToggleVisibility(product._id, e)}
-            className={`p-2 rounded-lg transition-colors ${
-              isHidden
-                ? 'bg-red-500 text-white hover:bg-red-600'
-                : 'bg-green-50 text-green-600 hover:bg-green-100'
-            }`}
-            title={isHidden ? 'Mostrar en catálogo' : 'Ocultar del catálogo'}
-          >
-            {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
-          <button
-            onClick={() => onEdit(product)}
-            className="p-2 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 transition-colors"
-            title="Editar"
-          >
-            <Pencil className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onDelete(product)}
-            className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-            title="Eliminar"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Variantes: subcategoría + imagen correspondiente */}
-      {variants.length > 0 && (
-        <div className="px-3 pb-3 flex gap-2 flex-wrap border-t border-gray-50 pt-2">
-          {variants.map((v) => (
-            <div
-              key={v.index}
-              className="flex items-center gap-1.5 bg-gray-50 border border-gray-100 rounded-lg px-2 py-1.5"
-            >
-              <div className="w-9 h-9 flex-shrink-0 rounded-md overflow-hidden bg-white border border-gray-200">
-                {v.img ? (
-                  <img src={v.img} alt={v.name ?? ''} className="w-full h-full object-contain p-0.5" loading="lazy" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <ImageIcon className="w-3 h-3 text-gray-300" />
-                  </div>
-                )}
-              </div>
-              {v.name && (
-                <span className="text-xs text-gray-600 font-medium">{v.name}</span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SortableProductCard({
-  product, disabled, getImageCount, getImageUrl, getCategoryName,
-  onToggleBestseller, onToggleVisibility, onEdit, onDelete,
-}: SortableProductCardProps) {
-  const {
-    attributes, listeners, setNodeRef, transform, transition, isDragging,
-  } = useSortable({ id: product._id, disabled });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : undefined,
-  };
-
-  const imgCount = getImageCount(product);
-  const mainImg = getImageUrl(product, 0);
-  const hasNoImages = imgCount === 0;
-  const subcats = (product.subcategories ?? []).filter(Boolean);
-  const isHidden = product.isVisible === false;
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`group bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden ${
-        hasNoImages ? 'border-2 border-dashed border-orange-300' : ''
-      } ${isHidden ? 'opacity-50 border-2 border-dashed border-red-400' : ''}`}
-    >
-      {/* Image area */}
-      <div className="aspect-[4/3] relative overflow-hidden bg-gray-50">
-        {mainImg ? (
-          <img
-            src={mainImg}
-            alt={product.name}
-            loading="lazy"
-            className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
-            <ImageIcon className="w-12 h-12 text-orange-300 mb-2" />
-            <span className="text-orange-400 text-xs font-medium">Sin imagen</span>
-          </div>
-        )}
-
-        {/* Drag handle - top left */}
-        {!disabled && (
-          <button
-            {...attributes}
-            {...listeners}
-            className="absolute top-2 left-2 p-1.5 rounded-full bg-white/80 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all cursor-grab active:cursor-grabbing"
-            title="Arrastrar para reordenar"
-          >
-            <GripVertical className="w-4 h-4" />
-          </button>
-        )}
-
-        {/* Bestseller star */}
-        <button
-          onClick={(e) => onToggleBestseller(product._id, e)}
-          className={`absolute top-2 ${disabled ? 'left-2' : 'left-10'} p-1.5 rounded-full transition-all ${
-            product.isBestseller
-              ? 'bg-yellow-400 text-white shadow-md'
-              : 'bg-white/80 text-gray-400 hover:bg-yellow-100 hover:text-yellow-500'
-          }`}
-          title={product.isBestseller ? 'Quitar más vendido' : 'Marcar más vendido'}
-        >
-          <Star className="w-4 h-4" fill={product.isBestseller ? 'currentColor' : 'none'} />
-        </button>
-
-        {/* Visibility toggle */}
-        <button
-          onClick={(e) => onToggleVisibility(product._id, e)}
-          className={`absolute top-2 ${disabled ? 'left-10' : 'left-[4.5rem]'} p-1.5 rounded-full transition-all ${
-            isHidden
-              ? 'bg-red-400 text-white shadow-md'
-              : 'bg-white/80 text-green-500 hover:bg-green-100'
-          }`}
-          title={isHidden ? 'Mostrar en catálogo' : 'Ocultar del catálogo'}
-        >
-          {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-
-        {/* Image count - top right */}
-        <div
-          className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-xs font-bold ${
-            imgCount === 7
-              ? 'bg-green-100 text-green-700'
-              : imgCount > 0
-              ? 'bg-orange-100 text-orange-700'
-              : 'bg-gray-200 text-gray-500'
-          }`}
-        >
-          {imgCount}/7
-        </div>
-
-        {/* Code badge - bottom right */}
-        <div className="absolute bottom-2 right-2">
-          <span className="inline-block bg-gradient-to-r from-cyan-400 to-blue-500 text-white px-2 py-0.5 rounded-lg text-xs font-bold shadow-md">
-            {product.code}
-          </span>
-        </div>
-      </div>
-
-      {/* Card body */}
-      <div className="p-3 text-center">
-        <h3 className="font-bold text-gray-800 text-sm leading-tight line-clamp-2 mb-1">
-          {product.name}
-        </h3>
-        <p className="text-xs text-gray-500 mb-2">
-          {getCategoryName(product.categoryId)}
-        </p>
-
-        {/* Subcategory pills */}
-        {subcats.length > 0 && (
-          <div className="flex flex-wrap justify-center gap-1 mb-3">
-            {subcats.map((sub, i) => (
-              <span
-                key={i}
-                className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px] font-medium"
-              >
-                {sub}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => onEdit(product)}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 transition-colors text-xs font-semibold"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-            Editar
-          </button>
-          <button
-            onClick={() => onDelete(product)}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-xs font-semibold"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface SortableCategoryRowProps {
-  category: Category;
-  productCount: number;
-  onChangeName: (cat: Category, name: string) => void;
-  onChangeEmoji: (cat: Category, emoji: string) => void;
-  onDelete: (cat: Category) => void;
-}
-
-function SortableCategoryRow({
-  category, productCount, onChangeName, onChangeEmoji, onDelete,
-}: SortableCategoryRowProps) {
-  const {
-    attributes, listeners, setNodeRef, transform, transition, isDragging,
-  } = useSortable({ id: category._id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-2 bg-gray-50 rounded-xl p-2 border border-gray-200"
-    >
-      <button
-        {...attributes}
-        {...listeners}
-        className="p-2 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing touch-none"
-        title="Arrastrar para reordenar"
-      >
-        <GripVertical className="w-4 h-4" />
-      </button>
-      <input
-        type="text"
-        value={category.emoji || ''}
-        onChange={(e) => onChangeEmoji(category, e.target.value)}
-        maxLength={4}
-        className="w-12 px-2 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm text-center bg-white"
-        placeholder="🎂"
-      />
-      <input
-        type="text"
-        value={category.name}
-        onChange={(e) => onChangeName(category, e.target.value)}
-        className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm bg-white font-semibold"
-      />
-      <span className="text-xs text-gray-500 px-2 whitespace-nowrap">
-        {productCount}
-      </span>
-      <button
-        onClick={() => onDelete(category)}
-        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-        title="Eliminar categoría"
-      >
-        <Trash2 className="w-4 h-4" />
-      </button>
-    </div>
-  );
-}
+import { getImageUrl } from '../components/admin/helpers';
+import { SortableProductCard } from '../components/admin/SortableProductCard';
+import { SortableListRow } from '../components/admin/SortableListRow';
+import { EditProductModal } from '../components/admin/EditProductModal';
+import { AddProductModal } from '../components/admin/AddProductModal';
+import { AddCategoryModal } from '../components/admin/AddCategoryModal';
+import { ManageCategoriesModal } from '../components/admin/ManageCategoriesModal';
+import { DeleteProductModal } from '../components/admin/DeleteProductModal';
 
 export function AdminPanel() {
   const { user, signOut, token, loading: authLoading } = useAuth();
@@ -433,51 +66,28 @@ export function AdminPanel() {
   );
   const imageSizesGlobal = useQuery(
     api.files.getImageSizes,
-    allStorageIds.length > 0 ? { storageIds: allStorageIds } : "skip"
+    token && allStorageIds.length > 0 ? { token, storageIds: allStorageIds } : "skip"
   );
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const getFileSizeColor = (bytes: number) => {
-    if (bytes < 100 * 1024) return { bg: 'bg-green-500', text: 'text-green-600', ring: 'ring-green-400' };
-    if (bytes < 200 * 1024) return { bg: 'bg-yellow-500', text: 'text-yellow-600', ring: 'ring-yellow-400' };
-    return { bg: 'bg-red-500', text: 'text-red-600', ring: 'ring-red-400' };
-  };
 
   // UI state
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingProductId, setEditingProductId] = useState<Id<'products'> | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
-
-  // Add category modal
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
-  const [newCategory, setNewCategory] = useState({ name: '', emoji: '', priority: 0 });
-
-  // Manage categories modal
   const [showManageCategoriesModal, setShowManageCategoriesModal] = useState(false);
 
-  // Add product form
-  const [newProduct, setNewProduct] = useState({ code: '', name: '', category_id: '' });
-  const [formErrors, setFormErrors] = useState<{ code?: string; name?: string; category_id?: string }>({});
-
-  // Subcategory editing
-  const [subcategoryValues, setSubcategoryValues] = useState<string[]>(['', '', '', '', '', '', '']);
-
-  // Product field editing
-  const [editName, setEditName] = useState('');
-  const [editCode, setEditCode] = useState('');
-  const [editCategoryId, setEditCategoryId] = useState('');
-
+  // Derivado de los datos reactivos: el modal refleja al instante
+  // subidas y borrados de imágenes sin cerrar y reabrir
+  const editingProduct = useMemo(
+    () => (editingProductId ? products.find((p) => p._id === editingProductId) ?? null : null),
+    [editingProductId, products]
+  );
 
   // DnD sensors
   const sensors = useSensors(
@@ -485,67 +95,121 @@ export function AdminPanel() {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
-  // Debounce refs (deben estar antes del early return)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const productDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const catDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Autoguardado con debounce: cambios pendientes por entidad. Si llega una
+  // edición de OTRA entidad, se guarda la pendiente de inmediato (flush) en
+  // vez de cancelarla — así nunca se pierde un cambio.
+  const productPendingRef = useRef<{
+    id: Id<'products'>;
+    fields: { name?: string; code?: string; categoryId?: string };
+  } | null>(null);
+  const productTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const subcatPendingRef = useRef<{ id: Id<'products'>; values: string[] } | null>(null);
+  const subcatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const categoryPendingRef = useRef<{
+    id: Id<'categories'>;
+    fields: { name?: string; emoji?: string };
+  } | null>(null);
+  const categoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showMessage = useCallback((type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
   }, []);
 
-  const autoSaveSubcategories = useCallback((values: string[]) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      if (!token || !editingProduct) return;
-      try {
-        await updateSubcategoriesMut({
-          token,
-          productId: editingProduct._id,
-          subcategories: values,
-        });
-      } catch (error) {
-        console.error('Error updating subcategories:', error);
-        showMessage('error', 'Error al actualizar las subcategorías');
-      }
-    }, 500);
-  }, [token, editingProduct, updateSubcategoriesMut, showMessage]);
+  const flushSubcatSave = useCallback(async () => {
+    if (subcatTimerRef.current) {
+      clearTimeout(subcatTimerRef.current);
+      subcatTimerRef.current = null;
+    }
+    const pending = subcatPendingRef.current;
+    subcatPendingRef.current = null;
+    if (!pending || !token) return;
+    try {
+      await updateSubcategoriesMut({
+        token,
+        productId: pending.id,
+        subcategories: pending.values,
+      });
+    } catch (error) {
+      console.error('Error updating subcategories:', error);
+      showMessage('error', 'Error al actualizar las subcategorías');
+    }
+  }, [token, updateSubcategoriesMut, showMessage]);
 
-  const autoSaveProduct = useCallback((fields: { name?: string; code?: string; categoryId?: string }) => {
-    if (productDebounceRef.current) clearTimeout(productDebounceRef.current);
-    productDebounceRef.current = setTimeout(async () => {
-      if (!token || !editingProduct) return;
-      try {
-        await updateProductMut({
-          token,
-          productId: editingProduct._id,
-          ...(fields.name !== undefined ? { name: fields.name } : {}),
-          ...(fields.code !== undefined ? { code: fields.code } : {}),
-          ...(fields.categoryId !== undefined ? { categoryId: fields.categoryId as Id<'categories'> } : {}),
-        });
-      } catch (error) {
-        showMessage('error', error instanceof Error ? error.message : 'Error al actualizar producto');
-      }
-    }, 500);
-  }, [token, editingProduct, updateProductMut, showMessage]);
+  const autoSaveSubcategories = useCallback((productId: Id<'products'>, values: string[]) => {
+    if (subcatPendingRef.current && subcatPendingRef.current.id !== productId) {
+      void flushSubcatSave();
+    }
+    subcatPendingRef.current = { id: productId, values };
+    if (subcatTimerRef.current) clearTimeout(subcatTimerRef.current);
+    subcatTimerRef.current = setTimeout(() => void flushSubcatSave(), 500);
+  }, [flushSubcatSave]);
+
+  const flushProductSave = useCallback(async () => {
+    if (productTimerRef.current) {
+      clearTimeout(productTimerRef.current);
+      productTimerRef.current = null;
+    }
+    const pending = productPendingRef.current;
+    productPendingRef.current = null;
+    if (!pending || !token) return;
+    try {
+      await updateProductMut({
+        token,
+        productId: pending.id,
+        ...(pending.fields.name !== undefined ? { name: pending.fields.name } : {}),
+        ...(pending.fields.code !== undefined ? { code: pending.fields.code } : {}),
+        ...(pending.fields.categoryId !== undefined
+          ? { categoryId: pending.fields.categoryId as Id<'categories'> }
+          : {}),
+      });
+    } catch (error) {
+      showMessage('error', error instanceof Error ? error.message : 'Error al actualizar producto');
+    }
+  }, [token, updateProductMut, showMessage]);
+
+  const autoSaveProduct = useCallback((
+    productId: Id<'products'>,
+    fields: { name?: string; code?: string; categoryId?: string },
+  ) => {
+    if (productPendingRef.current && productPendingRef.current.id !== productId) {
+      void flushProductSave();
+    }
+    const prevFields = productPendingRef.current?.fields ?? {};
+    productPendingRef.current = { id: productId, fields: { ...prevFields, ...fields } };
+    if (productTimerRef.current) clearTimeout(productTimerRef.current);
+    productTimerRef.current = setTimeout(() => void flushProductSave(), 500);
+  }, [flushProductSave]);
+
+  const flushCategorySave = useCallback(async () => {
+    if (categoryTimerRef.current) {
+      clearTimeout(categoryTimerRef.current);
+      categoryTimerRef.current = null;
+    }
+    const pending = categoryPendingRef.current;
+    categoryPendingRef.current = null;
+    if (!pending || !token) return;
+    try {
+      await updateCategoryMut({
+        token,
+        categoryId: pending.id,
+        ...(pending.fields.name !== undefined ? { name: pending.fields.name } : {}),
+        ...(pending.fields.emoji !== undefined ? { emoji: pending.fields.emoji } : {}),
+      });
+    } catch (error) {
+      showMessage('error', error instanceof Error ? error.message : 'Error al actualizar categoría');
+    }
+  }, [token, updateCategoryMut, showMessage]);
 
   const autoSaveCategory = useCallback((cat: Category, fields: { name?: string; emoji?: string }) => {
-    if (catDebounceRef.current) clearTimeout(catDebounceRef.current);
-    catDebounceRef.current = setTimeout(async () => {
-      if (!token) return;
-      try {
-        await updateCategoryMut({
-          token,
-          categoryId: cat._id,
-          ...(fields.name !== undefined ? { name: fields.name } : {}),
-          ...(fields.emoji !== undefined ? { emoji: fields.emoji } : {}),
-        });
-      } catch (error) {
-        showMessage('error', error instanceof Error ? error.message : 'Error al actualizar categoría');
-      }
-    }, 500);
-  }, [token, updateCategoryMut, showMessage]);
+    if (categoryPendingRef.current && categoryPendingRef.current.id !== cat._id) {
+      void flushCategorySave();
+    }
+    const prevFields = categoryPendingRef.current?.fields ?? {};
+    categoryPendingRef.current = { id: cat._id, fields: { ...prevFields, ...fields } };
+    if (categoryTimerRef.current) clearTimeout(categoryTimerRef.current);
+    categoryTimerRef.current = setTimeout(() => void flushCategorySave(), 500);
+  }, [flushCategorySave]);
 
   // Auth guard
   useEffect(() => {
@@ -590,10 +254,6 @@ export function AdminPanel() {
   });
 
   // === Handlers ===
-  const sanitizeInput = (input: string): string => {
-    return input.trim().replace(/<[^>]*>/g, '');
-  };
-
   const handleImageUpload = async (productId: Id<'products'>, file: File, imageIndex: number) => {
     if (!file.type.startsWith('image/') || !token) {
       showMessage('error', 'Por favor selecciona un archivo de imagen válido');
@@ -654,56 +314,21 @@ export function AdminPanel() {
     }
   };
 
-  const validateProduct = (): boolean => {
-    const errors: { code?: string; name?: string; category_id?: string } = {};
-    const sanitizedCode = sanitizeInput(newProduct.code);
-    const sanitizedName = sanitizeInput(newProduct.name);
-
-    if (!sanitizedCode) errors.code = 'El código es requerido';
-    else if (sanitizedCode.length < 2) errors.code = 'Mínimo 2 caracteres';
-    else if (sanitizedCode.length > 20) errors.code = 'Máximo 20 caracteres';
-    else if (products.some((p) => p.code.toLowerCase() === sanitizedCode.toLowerCase()))
-      errors.code = 'Ya existe un producto con este código';
-
-    if (!sanitizedName) errors.name = 'El nombre es requerido';
-    else if (sanitizedName.length < 3) errors.name = 'Mínimo 3 caracteres';
-    else if (sanitizedName.length > 100) errors.name = 'Máximo 100 caracteres';
-
-    if (!newProduct.category_id) errors.category_id = 'Selecciona una categoría';
-
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleAddProduct = async () => {
-    if (!validateProduct() || !token) return;
+  const handleAddProduct = async (code: string, name: string, categoryId: string) => {
+    if (!token) return;
     try {
       await addProduct({
         token,
-        code: sanitizeInput(newProduct.code),
-        name: sanitizeInput(newProduct.name),
-        categoryId: newProduct.category_id as Id<'categories'>,
+        code,
+        name,
+        categoryId: categoryId as Id<'categories'>,
       });
       setShowAddModal(false);
-      setNewProduct({ code: '', name: '', category_id: '' });
-      setFormErrors({});
       showMessage('success', 'Producto agregado');
     } catch (error) {
       console.error('Error adding product:', error);
       showMessage('error', 'Error al agregar el producto');
     }
-  };
-
-  const openEditModal = (product: Product) => {
-    setEditingProduct(product);
-    setEditName(product.name);
-    setEditCode(product.code);
-    setEditCategoryId(product.categoryId ?? '');
-    const subs = product.subcategories ?? [];
-    setSubcategoryValues([
-      subs[0] || '', subs[1] || '', subs[2] || '',
-      subs[3] || '', subs[4] || '', subs[5] || '', subs[6] || '',
-    ]);
   };
 
   const handleDeleteImage = async (productId: Id<'products'>, imageIndex: number, silent = false) => {
@@ -725,7 +350,7 @@ export function AdminPanel() {
       return;
     }
     try {
-      await removeCategoryMut({ token, name: cat.name });
+      await removeCategoryMut({ token, categoryId: cat._id });
       showMessage('success', 'Categoría eliminada');
     } catch (error) {
       console.error('Error deleting category:', error);
@@ -738,33 +363,21 @@ export function AdminPanel() {
     navigate('/');
   };
 
-  const getImageUrl = (product: Product, index: number): string | null => {
-    return product.imageUrls?.[index] ?? null;
-  };
-
-  const getImageCount = (product: Product): number => {
-    return (product.imageUrls ?? []).filter(Boolean).length;
-  };
-
   const getCategoryName = (categoryId?: Id<'categories'>): string => {
     if (!categoryId) return 'Sin categoría';
     return categories.find((c) => c._id === categoryId)?.name || 'Sin categoría';
   };
 
-  const handleAddCategory = async () => {
-    if (!token || !newCategory.name.trim()) return;
+  const handleAddCategory = async (name: string, emoji: string, priority: number) => {
+    if (!token || !name.trim()) return;
     try {
-      const nextPriority = newCategory.priority || (categories.length > 0
-        ? Math.max(...categories.map((c) => c.priority)) + 1
-        : 1);
       await addCategoryMut({
         token,
-        name: newCategory.name,
-        emoji: newCategory.emoji || undefined,
-        priority: nextPriority,
+        name,
+        emoji: emoji || undefined,
+        priority,
       });
       setShowAddCategoryModal(false);
-      setNewCategory({ name: '', emoji: '', priority: 0 });
       showMessage('success', 'Categoría agregada');
     } catch (error) {
       console.error('Error adding category:', error);
@@ -773,12 +386,19 @@ export function AdminPanel() {
   };
 
   // === Products grouped by category ===
-  const productsByCategory = categories
-    .map((category) => ({
+  // El grupo con category null recoge productos sin categoría (o con una
+  // categoría borrada) para que nunca queden invisibles en el panel
+  const knownCategoryIds = new Set<string>(categories.map((c) => c._id));
+  const orphanProducts = filteredProducts.filter(
+    (p) => !p.categoryId || !knownCategoryIds.has(p.categoryId)
+  );
+  const productsByCategory: { category: Category | null; products: Product[] }[] = [
+    ...categories.map((category) => ({
       category,
       products: filteredProducts.filter((p) => p.categoryId === category._id),
-    }))
-    .filter((group) => group.products.length > 0);
+    })),
+    { category: null, products: orphanProducts },
+  ].filter((group) => group.products.length > 0);
 
   // === Drag & Drop ===
   const handleDragStart = (event: DragStartEvent) => {
@@ -1030,12 +650,12 @@ export function AdminPanel() {
             {productsByCategory.map(({ category, products: catProducts }) => {
               const dndDisabled = hasActiveFilter;
               return (
-                <section key={category._id}>
+                <section key={category?._id ?? 'sin-categoria'}>
                   {/* Category header - only when showing all categories */}
                   {selectedCategory === null && (
                     <div className="mb-3 sm:mb-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-xl px-4 py-2.5 sm:px-5 sm:py-3 shadow-md flex items-center justify-center gap-3">
                       <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-                        {category.name}
+                        {category ? category.name : 'Sin categoría'}
                       </h2>
                       <span className="bg-white/25 text-white text-sm font-bold px-3 py-1 rounded-full">
                         {catProducts.length}
@@ -1068,12 +688,10 @@ export function AdminPanel() {
                               key={product._id}
                               product={product}
                               disabled={dndDisabled}
-                              getImageCount={getImageCount}
-                              getImageUrl={getImageUrl}
                               getCategoryName={getCategoryName}
                               onToggleBestseller={toggleBestseller}
                               onToggleVisibility={handleToggleVisibility}
-                              onEdit={openEditModal}
+                              onEdit={(p) => setEditingProductId(p._id)}
                               onDelete={setDeletingProduct}
                             />
                           ))}
@@ -1086,10 +704,9 @@ export function AdminPanel() {
                               product={product}
                               index={idx}
                               disabled={dndDisabled}
-                              getImageUrl={getImageUrl}
                               getCategoryName={getCategoryName}
                               onToggleVisibility={handleToggleVisibility}
-                              onEdit={openEditModal}
+                              onEdit={(p) => setEditingProductId(p._id)}
                               onDelete={setDeletingProduct}
                             />
                           ))}
@@ -1144,500 +761,60 @@ export function AdminPanel() {
         )}
       </main>
 
-      {/* === EDIT MODAL === */}
+      {/* === MODALES === */}
       {editingProduct && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            {/* Modal header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-800">
-                Editar Producto
-              </h2>
-              <button
-                onClick={() => setEditingProduct(null)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="px-4 sm:px-6 py-4 space-y-6">
-              {/* Product info section */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Pencil className="w-4 h-4" />
-                  Datos del Producto
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Código</label>
-                    <input
-                      type="text"
-                      value={editCode}
-                      onChange={(e) => {
-                        setEditCode(e.target.value);
-                        autoSaveProduct({ code: e.target.value });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Categoría</label>
-                    <select
-                      value={editCategoryId}
-                      onChange={(e) => {
-                        setEditCategoryId(e.target.value);
-                        autoSaveProduct({ categoryId: e.target.value });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm"
-                    >
-                      <option value="">Sin categoría</option>
-                      {categories.map((cat) => (
-                        <option key={cat._id} value={cat._id}>
-                          {cat.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Lista unificada: foto + nombre por fila */}
-              <div className="space-y-2">
-                {[0, 1, 2, 3, 4, 5, 6].map((index) => {
-                  const imgUrl = getImageUrl(editingProduct, index);
-                  const isUploading = uploading === `${editingProduct._id}-${index}`;
-                  const storageId = editingProduct.imageStorageIds?.[index];
-                  const fileSize = storageId && imageSizesGlobal?.[storageId];
-                  const isMain = index === 0;
-
-                  return (
-                    <div key={index} className="flex items-center gap-3 bg-gray-50 rounded-xl p-2">
-                      {/* Foto — clic para subir/reemplazar */}
-                      <div className="relative w-16 h-16 flex-shrink-0">
-                        <label
-                          className={`block w-full h-full cursor-pointer rounded-xl overflow-hidden transition-all ${
-                            imgUrl
-                              ? 'border-2 border-cyan-200 hover:border-cyan-400'
-                              : 'border-2 border-dashed border-gray-300 hover:border-cyan-400 bg-white'
-                          }`}
-                        >
-                          {isUploading ? (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-xl">
-                              <div className="animate-spin rounded-full h-5 w-5 border-2 border-cyan-400 border-t-transparent" />
-                            </div>
-                          ) : imgUrl ? (
-                            <>
-                              <img src={imgUrl} alt="" className="w-full h-full object-contain p-1" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
-                                <RefreshCw className="w-4 h-4 text-white" />
-                              </div>
-                            </>
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                              <Upload className="w-4 h-4 mb-0.5" />
-                              <span className="text-[9px]">Subir</span>
-                            </div>
-                          )}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleImageUpload(editingProduct._id, file, index);
-                              e.target.value = '';
-                            }}
-                            className="hidden"
-                            disabled={isUploading}
-                          />
-                        </label>
-                        {/* Borrar imagen */}
-                        {imgUrl && !isUploading && (
-                          <button
-                            onClick={() => handleDeleteImage(editingProduct._id, index)}
-                            className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors z-10"
-                            title="Eliminar imagen"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                        {/* Tamaño del archivo */}
-                        {fileSize && (
-                          <div className={`absolute -bottom-2 left-1/2 -translate-x-1/2 ${getFileSizeColor(fileSize).bg} text-white px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap`}>
-                            {formatFileSize(fileSize)}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Nombre editable */}
-                      <div className="flex-1 min-w-0">
-                        {isMain ? (
-                          <input
-                            type="text"
-                            value={editName}
-                            onChange={(e) => {
-                              setEditName(e.target.value);
-                              autoSaveProduct({ name: e.target.value });
-                            }}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm font-semibold bg-white"
-                            placeholder="Nombre del producto"
-                          />
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={subcategoryValues[index]}
-                              onChange={(e) => {
-                                const newValues = [...subcategoryValues];
-                                newValues[index] = e.target.value;
-                                setSubcategoryValues(newValues);
-                                autoSaveSubcategories(newValues);
-                              }}
-                              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-sm bg-white"
-                              placeholder={`Variante ${index}`}
-                            />
-                            {(subcategoryValues[index] || imgUrl) && (
-                              <button
-                                onClick={() => {
-                                  // Limpiar nombre siempre
-                                  const newValues = [...subcategoryValues];
-                                  newValues[index] = '';
-                                  setSubcategoryValues(newValues);
-                                  autoSaveSubcategories(newValues);
-                                  // Eliminar imagen en paralelo si existe (silencioso si falla)
-                                  if (imgUrl) {
-                                    handleDeleteImage(editingProduct._id, index, true);
-                                  }
-                                }}
-                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
-                                title="Eliminar variante"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Modal footer */}
-            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 sm:px-6 py-4 flex gap-3 rounded-b-2xl">
-              <button
-                onClick={() => {
-                  setDeletingProduct(editingProduct);
-                  setEditingProduct(null);
-                }}
-                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-semibold text-sm"
-              >
-                <Trash2 className="w-4 h-4" />
-                Eliminar producto
-              </button>
-              <button
-                onClick={() => setEditingProduct(null)}
-                className="flex-1 px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-sm"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
+        <EditProductModal
+          product={editingProduct}
+          categories={categories}
+          uploading={uploading}
+          imageSizes={imageSizesGlobal}
+          onAutoSaveProduct={autoSaveProduct}
+          onAutoSaveSubcategories={autoSaveSubcategories}
+          onUploadImage={handleImageUpload}
+          onDeleteImage={handleDeleteImage}
+          onClose={() => setEditingProductId(null)}
+          onDelete={() => {
+            setDeletingProduct(editingProduct);
+            setEditingProductId(null);
+          }}
+        />
       )}
 
-      {/* === ADD PRODUCT MODAL === */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800">Agregar Producto</h2>
-              <button
-                onClick={() => {
-                  setShowAddModal(false);
-                  setNewProduct({ code: '', name: '', category_id: '' });
-                  setFormErrors({});
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Código del Producto
-                </label>
-                <input
-                  type="text"
-                  value={newProduct.code}
-                  onChange={(e) => {
-                    setNewProduct({ ...newProduct, code: e.target.value });
-                    if (formErrors.code) setFormErrors({ ...formErrors, code: undefined });
-                  }}
-                  className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none ${
-                    formErrors.code ? 'border-red-400 focus:border-red-500' : 'border-gray-200 focus:border-cyan-400'
-                  }`}
-                  placeholder="Ej: LICOO"
-                  maxLength={20}
-                />
-                {formErrors.code && <p className="mt-1 text-sm text-red-500">{formErrors.code}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Nombre del Producto
-                </label>
-                <input
-                  type="text"
-                  value={newProduct.name}
-                  onChange={(e) => {
-                    setNewProduct({ ...newProduct, name: e.target.value });
-                    if (formErrors.name) setFormErrors({ ...formErrors, name: undefined });
-                  }}
-                  className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none ${
-                    formErrors.name ? 'border-red-400 focus:border-red-500' : 'border-gray-200 focus:border-cyan-400'
-                  }`}
-                  placeholder="Ej: BOTELLAS LICORES"
-                  maxLength={100}
-                />
-                {formErrors.name && <p className="mt-1 text-sm text-red-500">{formErrors.name}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Categoría</label>
-                <select
-                  value={newProduct.category_id}
-                  onChange={(e) => {
-                    setNewProduct({ ...newProduct, category_id: e.target.value });
-                    if (formErrors.category_id) setFormErrors({ ...formErrors, category_id: undefined });
-                  }}
-                  className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none ${
-                    formErrors.category_id
-                      ? 'border-red-400 focus:border-red-500'
-                      : 'border-gray-200 focus:border-cyan-400'
-                  }`}
-                >
-                  <option value="">Selecciona una categoría</option>
-                  {categories.map((category) => (
-                    <option key={category._id} value={category._id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-                {formErrors.category_id && (
-                  <p className="mt-1 text-sm text-red-500">{formErrors.category_id}</p>
-                )}
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={handleAddProduct}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold"
-                >
-                  <Plus className="w-5 h-5" />
-                  Agregar
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setNewProduct({ code: '', name: '', category_id: '' });
-                    setFormErrors({});
-                  }}
-                  className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AddProductModal
+          categories={categories}
+          products={products}
+          onAdd={handleAddProduct}
+          onClose={() => setShowAddModal(false)}
+        />
       )}
 
-      {/* === ADD CATEGORY MODAL === */}
       {showAddCategoryModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800">Agregar Categoría</h2>
-              <button
-                onClick={() => {
-                  setShowAddCategoryModal(false);
-                  setNewCategory({ name: '', emoji: '', priority: 0 });
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Nombre de la Categoría
-                </label>
-                <input
-                  type="text"
-                  value={newCategory.name}
-                  onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-purple-400"
-                  placeholder="Ej: FIGURAS"
-                  maxLength={50}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Emoji
-                </label>
-                <input
-                  type="text"
-                  value={newCategory.emoji}
-                  onChange={(e) => setNewCategory({ ...newCategory, emoji: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-purple-400"
-                  placeholder="Ej: 🎭"
-                  maxLength={4}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Prioridad (orden)
-                </label>
-                <input
-                  type="number"
-                  value={newCategory.priority}
-                  onChange={(e) => setNewCategory({ ...newCategory, priority: parseInt(e.target.value) || 0 })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-purple-400"
-                  min={1}
-                />
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={handleAddCategory}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-semibold"
-                >
-                  <Plus className="w-5 h-5" />
-                  Agregar
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAddCategoryModal(false);
-                    setNewCategory({ name: '', emoji: '', priority: 0 });
-                  }}
-                  className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AddCategoryModal
+          categories={categories}
+          onAdd={handleAddCategory}
+          onClose={() => setShowAddCategoryModal(false)}
+        />
       )}
 
-      {/* === MANAGE CATEGORIES MODAL === */}
       {showManageCategoriesModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-800">Gestionar Categorías</h2>
-              <button
-                onClick={() => setShowManageCategoriesModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              <p className="text-xs text-gray-500 mb-3">
-                Arrastra <GripVertical className="inline w-3 h-3" /> para cambiar el orden. Los cambios de nombre y emoji se guardan automáticamente.
-              </p>
-              {categories.length === 0 ? (
-                <div className="text-center py-10 text-gray-400 text-sm">
-                  No hay categorías todavía
-                </div>
-              ) : (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleCategoryDragEnd}
-                >
-                  <SortableContext
-                    items={categories.map((c) => c._id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="space-y-2">
-                      {categories.map((category) => (
-                        <SortableCategoryRow
-                          key={category._id}
-                          category={category}
-                          productCount={products.filter((p) => p.categoryId === category._id).length}
-                          onChangeName={(cat, name) => autoSaveCategory(cat, { name })}
-                          onChangeEmoji={(cat, emoji) => autoSaveCategory(cat, { emoji })}
-                          onDelete={handleDeleteCategory}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              )}
-            </div>
-
-            <div className="px-5 py-4 border-t border-gray-200 flex gap-3">
-              <button
-                onClick={() => {
-                  const nextPriority = categories.length > 0
-                    ? Math.max(...categories.map((c) => c.priority)) + 1
-                    : 1;
-                  setNewCategory({ name: '', emoji: '', priority: nextPriority });
-                  setShowAddCategoryModal(true);
-                }}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-semibold text-sm flex-1"
-              >
-                <Plus className="w-4 h-4" />
-                Agregar nueva
-              </button>
-              <button
-                onClick={() => setShowManageCategoriesModal(false)}
-                className="px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-sm"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
+        <ManageCategoriesModal
+          categories={categories}
+          products={products}
+          onAutoSaveCategory={autoSaveCategory}
+          onDeleteCategory={handleDeleteCategory}
+          onReorder={handleCategoryDragEnd}
+          onAddNew={() => setShowAddCategoryModal(true)}
+          onClose={() => setShowManageCategoriesModal(false)}
+        />
       )}
 
-      {/* === DELETE CONFIRMATION MODAL === */}
       {deletingProduct && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center">
-            <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Trash2 className="w-7 h-7 text-red-500" />
-            </div>
-            <h2 className="text-lg font-bold text-gray-800 mb-2">¿Eliminar producto?</h2>
-            <p className="text-sm text-gray-600 mb-1">{deletingProduct.name}</p>
-            <p className="text-xs text-gray-400 mb-6">Código: {deletingProduct.code}</p>
-            <div className="flex gap-3">
-              <button
-                onClick={handleDeleteProduct}
-                className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-semibold text-sm"
-              >
-                Eliminar
-              </button>
-              <button
-                onClick={() => setDeletingProduct(null)}
-                className="flex-1 px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-sm"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteProductModal
+          product={deletingProduct}
+          onConfirm={handleDeleteProduct}
+          onCancel={() => setDeletingProduct(null)}
+        />
       )}
     </div>
   );

@@ -77,12 +77,16 @@ export const reorder = mutation({
 });
 
 export const remove = mutation({
-  args: { token: v.string(), name: v.string() },
+  args: { token: v.string(), categoryId: v.id("categories") },
   handler: async (ctx, args) => {
     await assertAdmin(ctx, args.token);
-    const categories = await ctx.db.query("categories").collect();
-    const category = categories.find((c) => c.name === args.name);
+    const category = await ctx.db.get(args.categoryId);
     if (!category) throw new Error("Category not found");
-    await ctx.db.delete(category._id);
+    const assigned = await ctx.db
+      .query("products")
+      .withIndex("by_category", (q) => q.eq("categoryId", args.categoryId))
+      .first();
+    if (assigned) throw new Error("No se puede eliminar: la categoría tiene productos asignados");
+    await ctx.db.delete(args.categoryId);
   },
 });
