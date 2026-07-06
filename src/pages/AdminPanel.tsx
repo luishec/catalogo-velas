@@ -4,7 +4,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  LogOut, Upload, Save, X, Image as ImageIcon, Plus,
+  LogOut, Upload, X, Image as ImageIcon, Plus,
   Trash2, Search, Star, Pencil, Eye, EyeOff, GripVertical, RefreshCw, LayoutGrid, List, Settings
 } from 'lucide-react';
 import type { Product, Category } from '../types';
@@ -35,10 +35,6 @@ interface SortableProductCardProps {
   getImageCount: (p: Product) => number;
   getImageUrl: (p: Product, i: number) => string | null;
   getCategoryName: (id?: Id<'categories'>) => string;
-  getCategoryEmoji: (id?: Id<'categories'>) => string;
-  imageSizes?: Record<string, number> | null;
-  formatFileSize: (bytes: number) => string;
-  getFileSizeColor: (bytes: number) => { bg: string; text: string; ring: string };
   onToggleBestseller: (id: Id<'products'>, e: React.MouseEvent) => void;
   onToggleVisibility: (id: Id<'products'>, e: React.MouseEvent) => void;
   onEdit: (p: Product) => void;
@@ -51,14 +47,13 @@ interface SortableListRowProps {
   disabled: boolean;
   getImageUrl: (p: Product, i: number) => string | null;
   getCategoryName: (id?: Id<'categories'>) => string;
-  getCategoryEmoji: (id?: Id<'categories'>) => string;
   onToggleVisibility: (id: Id<'products'>, e: React.MouseEvent) => void;
   onEdit: (p: Product) => void;
   onDelete: (p: Product) => void;
 }
 
 function SortableListRow({
-  product, index, disabled, getImageUrl, getCategoryName, getCategoryEmoji, onToggleVisibility, onEdit, onDelete,
+  product, index, disabled, getImageUrl, getCategoryName, onToggleVisibility, onEdit, onDelete,
 }: SortableListRowProps) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -197,8 +192,8 @@ function SortableListRow({
 }
 
 function SortableProductCard({
-  product, disabled, getImageCount, getImageUrl, getCategoryName, getCategoryEmoji,
-  imageSizes, formatFileSize, getFileSizeColor, onToggleBestseller, onToggleVisibility, onEdit, onDelete,
+  product, disabled, getImageCount, getImageUrl, getCategoryName,
+  onToggleBestseller, onToggleVisibility, onEdit, onDelete,
 }: SortableProductCardProps) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -410,7 +405,7 @@ export function AdminPanel() {
   const { user, signOut, token, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  const productsData = useQuery(api.products.list);
+  const productsData = useQuery(api.products.listAdmin, token ? { token } : "skip");
   const categoriesData = useQuery(api.categories.list);
 
   const addProduct = useMutation(api.products.add);
@@ -428,8 +423,8 @@ export function AdminPanel() {
   const reorderCategoriesMut = useMutation(api.categories.reorder);
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
 
-  const products = (productsData as Product[] | undefined) ?? [];
-  const categories = (categoriesData as Category[] | undefined) ?? [];
+  const products = useMemo(() => (productsData as Product[] | undefined) ?? [], [productsData]);
+  const categories = useMemo(() => (categoriesData as Category[] | undefined) ?? [], [categoriesData]);
   const dataLoading = productsData === undefined || categoriesData === undefined;
 
   const allStorageIds = useMemo(
@@ -491,9 +486,9 @@ export function AdminPanel() {
   );
 
   // Debounce refs (deben estar antes del early return)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-  const productDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-  const catDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const productDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const catDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showMessage = useCallback((type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -527,10 +522,10 @@ export function AdminPanel() {
           productId: editingProduct._id,
           ...(fields.name !== undefined ? { name: fields.name } : {}),
           ...(fields.code !== undefined ? { code: fields.code } : {}),
-          ...(fields.categoryId !== undefined ? { categoryId: fields.categoryId as any } : {}),
+          ...(fields.categoryId !== undefined ? { categoryId: fields.categoryId as Id<'categories'> } : {}),
         });
-      } catch (error: any) {
-        showMessage('error', error.message || 'Error al actualizar producto');
+      } catch (error) {
+        showMessage('error', error instanceof Error ? error.message : 'Error al actualizar producto');
       }
     }, 500);
   }, [token, editingProduct, updateProductMut, showMessage]);
@@ -546,8 +541,8 @@ export function AdminPanel() {
           ...(fields.name !== undefined ? { name: fields.name } : {}),
           ...(fields.emoji !== undefined ? { emoji: fields.emoji } : {}),
         });
-      } catch (error: any) {
-        showMessage('error', error.message || 'Error al actualizar categoría');
+      } catch (error) {
+        showMessage('error', error instanceof Error ? error.message : 'Error al actualizar categoría');
       }
     }, 500);
   }, [token, updateCategoryMut, showMessage]);
@@ -711,10 +706,10 @@ export function AdminPanel() {
     ]);
   };
 
-  const handleDeleteImage = async (productId: string, imageIndex: number, silent = false) => {
+  const handleDeleteImage = async (productId: Id<'products'>, imageIndex: number, silent = false) => {
     if (!token) return;
     try {
-      await deleteProductImageMut({ token, productId: productId as any, imageIndex });
+      await deleteProductImageMut({ token, productId, imageIndex });
       if (!silent) showMessage('success', 'Imagen eliminada');
     } catch (error) {
       console.error('Error deleting image:', error);
@@ -756,11 +751,6 @@ export function AdminPanel() {
     return categories.find((c) => c._id === categoryId)?.name || 'Sin categoría';
   };
 
-  const getCategoryEmoji = (categoryId?: Id<'categories'>): string => {
-    if (!categoryId) return '🎂';
-    return categories.find((c) => c._id === categoryId)?.emoji || '🎂';
-  };
-
   const handleAddCategory = async () => {
     if (!token || !newCategory.name.trim()) return;
     try {
@@ -776,9 +766,9 @@ export function AdminPanel() {
       setShowAddCategoryModal(false);
       setNewCategory({ name: '', emoji: '', priority: 0 });
       showMessage('success', 'Categoría agregada');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error adding category:', error);
-      showMessage('error', error.message || 'Error al agregar categoría');
+      showMessage('error', error instanceof Error ? error.message : 'Error al agregar categoría');
     }
   };
 
@@ -840,9 +830,9 @@ export function AdminPanel() {
     const updates = reordered.map((c, i) => ({ categoryId: c._id, priority: i + 1 }));
     try {
       await reorderCategoriesMut({ token, updates });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error reordering categories:', error);
-      showMessage('error', error.message || 'Error al reordenar categorías');
+      showMessage('error', error instanceof Error ? error.message : 'Error al reordenar categorías');
     }
   };
 
@@ -1081,10 +1071,6 @@ export function AdminPanel() {
                               getImageCount={getImageCount}
                               getImageUrl={getImageUrl}
                               getCategoryName={getCategoryName}
-                              getCategoryEmoji={getCategoryEmoji}
-                              imageSizes={imageSizesGlobal}
-                              formatFileSize={formatFileSize}
-                              getFileSizeColor={getFileSizeColor}
                               onToggleBestseller={toggleBestseller}
                               onToggleVisibility={handleToggleVisibility}
                               onEdit={openEditModal}
@@ -1102,7 +1088,6 @@ export function AdminPanel() {
                               disabled={dndDisabled}
                               getImageUrl={getImageUrl}
                               getCategoryName={getCategoryName}
-                              getCategoryEmoji={getCategoryEmoji}
                               onToggleVisibility={handleToggleVisibility}
                               onEdit={openEditModal}
                               onDelete={setDeletingProduct}

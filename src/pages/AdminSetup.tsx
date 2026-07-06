@@ -21,8 +21,8 @@ export function AdminSetup() {
       await signupMutation({ email, password });
       alert('¡Usuario administrador creado exitosamente! Ahora puedes iniciar sesión.');
       navigate('/admin/login');
-    } catch (error: any) {
-      setError(error.message || 'Error al crear el usuario');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Error al crear el usuario');
     } finally {
       setLoading(false);
     }

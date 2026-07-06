@@ -1,10 +1,22 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 import { assertAdmin } from "./auth";
 
+// Catálogo público: solo productos visibles
 export const list = query({
   args: {},
   handler: async (ctx) => {
+    const products = await ctx.db.query("products").withIndex("by_order").collect();
+    return products.filter((p) => p.isVisible !== false);
+  },
+});
+
+// Panel de administración: todos los productos, incluidos los ocultos
+export const listAdmin = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await assertAdmin(ctx, args.token);
     return await ctx.db.query("products").withIndex("by_order").collect();
   },
 });
@@ -47,7 +59,7 @@ export const remove = mutation({
     if (product?.imageStorageIds) {
       for (const storageId of product.imageStorageIds) {
         if (storageId) {
-          await ctx.storage.delete(storageId as any);
+          await ctx.storage.delete(storageId as Id<"_storage">);
         }
       }
     }
@@ -116,7 +128,7 @@ export const updateProduct = mutation({
     const product = await ctx.db.get(args.productId);
     if (!product) throw new Error("Product not found");
 
-    const updates: Record<string, any> = {};
+    const updates: { code?: string; name?: string; categoryId?: Id<"categories"> } = {};
 
     if (args.code !== undefined && args.code !== product.code) {
       const existing = await ctx.db
@@ -151,7 +163,7 @@ export const deleteProductImage = mutation({
 
     if (args.imageIndex < storageIds.length && storageIds[args.imageIndex]) {
       try {
-        await ctx.storage.delete(storageIds[args.imageIndex] as any);
+        await ctx.storage.delete(storageIds[args.imageIndex] as Id<"_storage">);
       } catch {
         // El objeto puede no existir en storage; continuamos a limpiar la BD
       }
@@ -185,8 +197,18 @@ export const updateProductImage = mutation({
     while (storageIds.length <= args.imageIndex) storageIds.push("");
     while (urls.length <= args.imageIndex) urls.push("");
 
+    // Al reemplazar una imagen, borrar el archivo anterior del storage
+    const previousStorageId = storageIds[args.imageIndex];
+    if (previousStorageId && previousStorageId !== args.storageId) {
+      try {
+        await ctx.storage.delete(previousStorageId as Id<"_storage">);
+      } catch {
+        // El archivo anterior puede no existir; continuamos
+      }
+    }
+
     storageIds[args.imageIndex] = args.storageId;
-    const url = await ctx.storage.getUrl(args.storageId as any);
+    const url = await ctx.storage.getUrl(args.storageId as Id<"_storage">);
     urls[args.imageIndex] = url || "";
 
     await ctx.db.patch(args.productId, {

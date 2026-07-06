@@ -19,7 +19,7 @@ export function AdminLogin() {
     try {
       await signIn(email, password);
       navigate('/admin');
-    } catch (err) {
+    } catch {
       setError('Credenciales incorrectas. Por favor, intenta de nuevo.');
     } finally {
       setLoading(false);

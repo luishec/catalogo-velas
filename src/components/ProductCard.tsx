@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 
 interface ProductCardProduct {
@@ -25,8 +25,8 @@ export function ProductCard({ product, variants = [], mainImage }: ProductCardPr
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [bestsellerTooltipState, setBestsellerTooltipState] = useState<'hidden' | 'visible' | 'fading'>('hidden');
-  const tooltipTimeout = useRef<ReturnType<typeof setTimeout>>(null);
-  const fadeTimeout = useRef<ReturnType<typeof setTimeout>>(null);
+  const tooltipTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentImage = selectedVariantIndex === -1
     ? (mainImage || product.imageUrl)
@@ -42,15 +42,6 @@ export function ProductCard({ product, variants = [], mainImage }: ProductCardPr
       ? (mainImage || product.imageUrl)
       : (variants[newIndex]?.imageUrl || product.imageUrl);
     setSelectedVariantIndex(newIndex);
-    if (newImage !== currentImage) {
-      setImageLoaded(false);
-      setImageError(false);
-    }
-  };
-
-  const handleMainImageClick = () => {
-    const newImage = mainImage || product.imageUrl;
-    setSelectedVariantIndex(-1);
     if (newImage !== currentImage) {
       setImageLoaded(false);
       setImageError(false);

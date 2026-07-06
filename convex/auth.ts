@@ -27,8 +27,15 @@ export const login = mutation({
     const isValid = await verifyPassword(args.password, admin.passwordHash);
     if (!isValid) throw new Error("Invalid credentials");
 
+    // Aprovechar el login para purgar sesiones expiradas
+    const now = Date.now();
+    const allSessions = await ctx.db.query("sessions").collect();
+    for (const session of allSessions) {
+      if (session.expiresAt < now) await ctx.db.delete(session._id);
+    }
+
     const token = generateToken();
-    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const expiresAt = now + 7 * 24 * 60 * 60 * 1000;
 
     await ctx.db.insert("sessions", {
       adminId: admin._id,

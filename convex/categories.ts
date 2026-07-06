@@ -44,7 +44,7 @@ export const update = mutation({
     const category = await ctx.db.get(args.categoryId);
     if (!category) throw new Error("Category not found");
 
-    const updates: Record<string, any> = {};
+    const updates: { name?: string; emoji?: string; priority?: number } = {};
     if (args.name !== undefined) {
       const trimmed = args.name.trim().toUpperCase();
       const categories = await ctx.db.query("categories").collect();

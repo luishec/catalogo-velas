@@ -12,10 +12,9 @@ interface Category {
 interface CatalogHeaderProps {
   categories?: Category[];
   onSelectCategory?: (categoryId: string) => void;
-  productCounts?: Record<string, number>;
 }
 
-export function CatalogHeader({ categories = [], onSelectCategory, productCounts = {} }: CatalogHeaderProps) {
+export function CatalogHeader({ categories = [], onSelectCategory }: CatalogHeaderProps) {
   const navigate = useNavigate();
   const [clickCount, setClickCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);

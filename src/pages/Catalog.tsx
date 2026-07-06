@@ -9,8 +9,8 @@ export function Catalog() {
   const productsData = useQuery(api.products.list);
   const categoriesData = useQuery(api.categories.list);
 
-  const products = (productsData as Product[] | undefined) ?? [];
-  const categories = (categoriesData as Category[] | undefined) ?? [];
+  const products = useMemo(() => (productsData as Product[] | undefined) ?? [], [productsData]);
+  const categories = useMemo(() => (categoriesData as Category[] | undefined) ?? [], [categoriesData]);
   const loading = productsData === undefined || categoriesData === undefined;
 
   const visibleProducts = useMemo(() => {
@@ -22,13 +22,6 @@ export function Catalog() {
       category,
       products: visibleProducts.filter(p => p.categoryId === category._id),
     })).filter(group => group.products.length > 0);
-  }, [categories, visibleProducts]);
-
-  const productCounts = useMemo(() => {
-    return categories.reduce((acc, category) => {
-      acc[category._id] = visibleProducts.filter(p => p.categoryId === category._id).length;
-      return acc;
-    }, {} as Record<string, number>);
   }, [categories, visibleProducts]);
 
   const handleScrollToCategory = useCallback((categoryId: string) => {
@@ -54,7 +47,6 @@ export function Catalog() {
       <CatalogHeader
         categories={categories}
         onSelectCategory={handleScrollToCategory}
-        productCounts={productCounts}
       />
 
       <main className="max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-6">
